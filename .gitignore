@@ -1,0 +1,26 @@
+# Entorno
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / Next
+node_modules/
+.next/
+out/
+next-env.d.ts
+
+# Datos
+*.log
+postgres_data/
+cd_postgres_data/
+
+# Sistema
+.DS_Store
+Thumbs.db

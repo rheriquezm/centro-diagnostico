@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --surface: #f8fafc;
+  --surface-soft: #f1f5f9;
+  --surface-card: #ffffff;
+  --surface-border: #e2e8f0;
+  --text: #0f172a;
+  --text-muted: #64748b;
+}
+
+.dark {
+  color-scheme: dark;
+  --surface: #0b1220;
+  --surface-soft: #111a2e;
+  --surface-card: #151f37;
+  --surface-border: #243049;
+  --text: #e2e8f0;
+  --text-muted: #94a3b8;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  @apply bg-surface text-content antialiased;
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-surface-border bg-surface-card p-5;
+  }
+  .card-title {
+    @apply text-sm font-medium text-content-muted;
+  }
+  .kpi {
+    @apply text-3xl font-bold text-content;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition;
+  }
+  .btn-primary {
+    @apply btn bg-gob-blue text-white hover:bg-blue-800;
+  }
+  .btn-ghost {
+    @apply btn border border-surface-border text-content hover:bg-surface-soft;
+  }
+  .input {
+    @apply w-full rounded-lg border border-surface-border bg-surface-soft px-3 py-2 text-sm text-content outline-none focus:border-gob-info;
+  }
+  .table {
+    @apply w-full border-collapse text-sm;
+  }
+  .table th {
+    @apply border-b border-surface-border px-3 py-2 text-left text-xs uppercase tracking-wide text-content-muted;
+  }
+  .table td {
+    @apply border-b border-surface-border px-3 py-2;
+  }
+}
