@@ -15,7 +15,7 @@ error continúa, causa probable, qué revisar y cómo verificar la solución*.
 | Frontend | Next.js 14 + TypeScript + Tailwind CSS (modo oscuro) |
 | Backend | Python 3.11 + FastAPI |
 | Base de datos | PostgreSQL 16 |
-| Integraciones | Redmine REST API · Graylog REST API |
+| Integraciones | Redmine REST API · Graylog REST API · Yale Connect · ZKBio CVAccess |
 | IA | Interfaz plug-in (`none`/`openai`/`gemini`/`ollama`) |
 | Despliegue | Docker + Docker Compose |
 
@@ -43,8 +43,23 @@ docker compose up -d backend
 
 Detalle en [CONFIGURATION.md](CONFIGURATION.md).
 
+## Despliegue (producción)
+
+Guía completa en [DEPLOYMENT.md](DEPLOYMENT.md). Resumen:
+
+```bash
+cp .env.example .env      # SECRET_KEY, DATABASE_URL, CORS_ORIGINS e integraciones
+# DEV_LOGIN_ENABLED=false   ALLOWED_DOMAINS=tu-dominio.cl
+docker compose up -d --build
+```
+
+- Backend en `BACKEND_PORT` (por defecto 8000; esta instancia usa **8100**).
+- Frontend en `FRONTEND_PORT` (3000).
+- Ponlo detrás de HTTPS (reverse proxy) y ajusta `CORS_ORIGINS` y `NEXT_PUBLIC_API_URL`.
+
 ## Documentación
 
+- [DEPLOYMENT.md](DEPLOYMENT.md) — despliegue en producción (Docker, proxy, backups).
 - [ARCHITECTURE.md](ARCHITECTURE.md) — diseño y componentes.
 - [INSTALLATION.md](INSTALLATION.md) — instalación paso a paso.
 - [CONFIGURATION.md](CONFIGURATION.md) — variables de entorno.
@@ -68,6 +83,7 @@ Detalle en [CONFIGURATION.md](CONFIGURATION.md).
 - **Redmine:** `/api/redmine/test`, `/projects`, `POST /sync`, `/tickets`.
 - **Graylog:** `/api/graylog/test`, `/streams`, `POST /sync`, `/fingerprints`.
 - **Cerradura Yale (ASSA ABLOY):** `/api/yale/test`, `POST /sync`, `/records`, `/resumen` (aperturas/cierres por usuario, puerta y hora; se sincroniza cada 60 min).
+- **Control de Acceso ZKBio (ZKTeco):** `/api/zkbio/test`, `POST /sync`, `/records`, `/resumen` (eventos de acceso por usuario, dispositivo y hora, incluyendo el número de tarjeta; se sincroniza cada 60 min).
 - **Correlación/hallazgos:** `POST /api/pipeline/run`, `/api/problems`, `/api/correlations`, `/api/findings`.
 - **IA:** `POST /api/ai/diagnose`, `POST /api/assistant/ask`.
 - **Mejora continua / KB / buscador:** `/api/continuous/indicators`, `/api/knowledge`, `/api/search`.
