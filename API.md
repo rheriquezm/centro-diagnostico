@@ -1,6 +1,6 @@
 # API
 
-Base: `http://localhost:8000`. Documentación interactiva: `/docs`.
+Base: `http://localhost:8010`. Documentación interactiva: `/docs`.
 
 ## Observabilidad (público)
 
@@ -53,14 +53,14 @@ Todas las rutas siguientes requieren `Authorization: Bearer <token>`.
 
 ```bash
 # Health
-curl http://localhost:8000/health
+curl http://localhost:8010/health
 
 # Login de desarrollo
-curl -X POST http://localhost:8000/api/auth/dev-login \
+curl -X POST http://localhost:8010/api/auth/dev-login \
   -H "Content-Type: application/json" \
   -d '{"email":"rhenriquez@serviciocivil.cl"}'
 
 # Dashboard (con token)
-curl http://localhost:8000/api/dashboard/summary \
+curl http://localhost:8010/api/dashboard/summary \
   -H "Authorization: Bearer <token>"
 ```

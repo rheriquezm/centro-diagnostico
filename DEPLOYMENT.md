@@ -42,11 +42,11 @@ Credenciales de integración (solo lectura): `REDMINE_*`, `GRAYLOG_*`, `YALE_*`,
 ```bash
 docker compose up -d --build
 docker compose ps
-curl http://localhost:8000/health   # ajusta al BACKEND_PORT
+curl http://localhost:8010/health   # ajusta al BACKEND_PORT
 ```
 
-- Backend: `http://<host>:${BACKEND_PORT}` (por defecto 8000).
-- Frontend: `http://<host>:${FRONTEND_PORT}` (por defecto 3000).
+- Backend: `http://<host>:${BACKEND_PORT}` (por defecto 8010).
+- Frontend: `http://<host>:${FRONTEND_PORT}` (por defecto 8011).
 - Health: `/health` · Ready: `/ready` · Docs: `/docs`.
 
 Las tablas se crean automáticamente al iniciar el backend
@@ -90,14 +90,14 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/diagnostico.midominio.cl/privkey.pem;
 
     location / {
-        proxy_pass http://127.0.0.1:3000;   # FRONTEND_PORT
+        proxy_pass http://127.0.0.1:8011;   # FRONTEND_PORT
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     location /api/ {
-        proxy_pass http://127.0.0.1:8100;   # BACKEND_PORT
+        proxy_pass http://127.0.0.1:8010;   # BACKEND_PORT
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
@@ -146,7 +146,7 @@ cat backup.sql | docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRE
 
 Ver [TROUBLESHOOTING.md](TROUBLESHOOTING.md). Los más comunes:
 
-- **Puerto ocupado** (3000/8000/8100/5432): ajusta `FRONTEND_PORT` /
+- **Puerto ocupado** (8010/8011/5432): ajusta `FRONTEND_PORT` /
   `BACKEND_PORT`.
 - **Frontend no conecta al backend**: `NEXT_PUBLIC_API_URL` incorrecto o falta
   reconstruir el frontend.

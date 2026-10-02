@@ -11,9 +11,9 @@ secretos en el código ni en el frontend.
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Vigencia del token. | `480` |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | Credenciales PostgreSQL. | `centro` / `***` / `centro_diagnostico` |
 | `DATABASE_URL` | Cadena de conexión (la arma compose). | `postgresql+psycopg2://...` |
-| `BACKEND_PORT` / `FRONTEND_PORT` | Puertos publicados. | `8000` / `3000` |
-| `NEXT_PUBLIC_API_URL` | URL del backend vista por el navegador. | `http://localhost:8000` |
-| `CORS_ORIGINS` | Orígenes permitidos (coma). | `http://localhost:3000` |
+| `BACKEND_PORT` / `FRONTEND_PORT` | Puertos publicados. | `8010` / `8011` |
+| `NEXT_PUBLIC_API_URL` | URL del backend vista por el navegador. | `http://localhost:8010` |
+| `CORS_ORIGINS` | Orígenes permitidos (coma). | `http://localhost:8011` |
 | `GOOGLE_CLIENT_ID` | Client ID OAuth (producción). | `...apps.googleusercontent.com` |
 | `ALLOWED_EMAILS_FILE` | Whitelist de correos. | `allowed_emails.json` |
 | `DEV_LOGIN_ENABLED` | Habilita login de desarrollo (solo dev). | `false` |

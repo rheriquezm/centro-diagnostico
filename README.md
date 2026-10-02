@@ -26,9 +26,9 @@ cp .env.example .env      # completa credenciales (ver CONFIGURATION.md)
 docker compose up -d
 ```
 
-- Frontend: http://localhost:3000
-- Backend:  http://localhost:8000/docs
-- Health:   http://localhost:8000/health  ·  Ready: http://localhost:8000/ready
+- Frontend: http://localhost:8011
+- Backend:  http://localhost:8010/docs
+- Health:   http://localhost:8010/health  ·  Ready: http://localhost:8010/ready
 
 ## IA (opcional, local)
 
@@ -53,8 +53,8 @@ cp .env.example .env      # SECRET_KEY, DATABASE_URL, CORS_ORIGINS e integracion
 docker compose up -d --build
 ```
 
-- Backend en `BACKEND_PORT` (por defecto 8000; esta instancia usa **8100**).
-- Frontend en `FRONTEND_PORT` (3000).
+- Backend en `BACKEND_PORT` (por defecto **8010**).
+- Frontend en `FRONTEND_PORT` (por defecto **8011**).
 - Ponlo detrás de HTTPS (reverse proxy) y ajusta `CORS_ORIGINS` y `NEXT_PUBLIC_API_URL`.
 
 ## Documentación
