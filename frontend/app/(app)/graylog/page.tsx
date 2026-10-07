@@ -4,11 +4,15 @@ import { useCallback, useEffect, useState } from "react";
 
 import Badge from "@/components/Badge";
 import BarList from "@/components/BarList";
+import ConnectorStatusBar from "@/components/ConnectorStatusBar";
 import DiagnosisModal from "@/components/DiagnosisModal";
 import Donut from "@/components/Donut";
 import KpiCard from "@/components/KpiCard";
 import { api } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
+import { useConnections } from "@/lib/useConnections";
+
+type Host = { host: string; total: number };
 
 type Fingerprint = {
   id: number;
@@ -21,6 +25,7 @@ type Fingerprint = {
   primera: string | null;
   ultima: string | null;
   template: string | null;
+  hosts: Host[];
 };
 
 type Grupo = { nombre: string; total: number; ocurrencias?: number };
@@ -40,8 +45,23 @@ type Resumen = {
     servicio: string | null;
     severidad: string;
     ocurrencias: number;
+    hosts: Host[];
   }>;
 };
+
+function HostCell({ hosts }: { hosts?: Host[] }) {
+  if (!hosts || hosts.length === 0) return <span className="text-content-muted">—</span>;
+  const [first, ...rest] = hosts;
+  return (
+    <span
+      className="font-mono text-xs"
+      title={hosts.map((h) => `${h.host} (${h.total})`).join(", ")}
+    >
+      {first.host}
+      {rest.length ? <span className="text-content-muted"> +{rest.length}</span> : null}
+    </span>
+  );
+}
 
 export default function GraylogPage() {
   const [items, setItems] = useState<Fingerprint[]>([]);
@@ -51,6 +71,9 @@ export default function GraylogPage() {
   const [rangeSeconds, setRangeSeconds] = useState(86400);
   const [maxMessages, setMaxMessages] = useState(2000);
   const [selected, setSelected] = useState<number | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const { data: conn, refresh: refreshConn, runSync } = useConnections();
 
   const load = useCallback(async () => {
     try {
@@ -71,25 +94,44 @@ export default function GraylogPage() {
 
   async function testConnection() {
     setError(null);
+    setMessage(null);
+    setTesting(true);
     try {
       const info = await api.get<{ version: string }>("/api/graylog/test");
       setMessage(`Graylog ${info.version} conectado.`);
+      await refreshConn();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error");
+    } finally {
+      setTesting(false);
     }
   }
 
   async function sync() {
     setError(null);
+    setMessage("Sincronización iniciada; procesando…");
+    setSyncing(true);
     try {
-      const r = await api.post<{ status: string }>(
-        `/api/graylog/sync?query=*&range_seconds=${rangeSeconds}&max_messages=${maxMessages}`,
-        {}
+      const run = await runSync("graylog", () =>
+        api.post(
+          `/api/graylog/sync?query=*&range_seconds=${rangeSeconds}&max_messages=${maxMessages}`,
+          {}
+        )
       );
-      setMessage(`Sincronización ${r.status}. Procesando en segundo plano…`);
-      setTimeout(load, 20000);
+      if (run && run.status === "error") {
+        setError(run.error || "La sincronización falló.");
+        setMessage(null);
+      } else if (run) {
+        setMessage(`Sincronización completada · ${run.items} registros considerados.`);
+      } else {
+        setMessage("Sincronización en curso; el estado se actualizará en breve.");
+      }
+      await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error");
+      setMessage(null);
+    } finally {
+      setSyncing(false);
     }
   }
 
@@ -103,10 +145,20 @@ export default function GraylogPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <button className="btn-ghost" onClick={testConnection}>Probar conexión</button>
-          <button className="btn-primary" onClick={sync}>Sincronizar y agrupar</button>
+          <button className="btn-ghost" onClick={testConnection} disabled={testing || syncing}>
+            {testing ? "Probando…" : "Probar conexión"}
+          </button>
+          <button className="btn-primary" onClick={sync} disabled={syncing}>
+            {syncing ? "Sincronizando…" : "Sincronizar y agrupar"}
+          </button>
         </div>
       </div>
+
+      <ConnectorStatusBar
+        info={conn?.connectors?.graylog}
+        scheduler={conn?.scheduler}
+        busy={syncing}
+      />
 
       {message ? <div className="card text-gob-info">{message}</div> : null}
       {error ? <div className="card text-gob-error">{error}</div> : null}
@@ -160,6 +212,13 @@ export default function GraylogPage() {
                 <span className="flex min-w-0 items-center gap-2">
                   <Badge tone={t.severidad}>{t.severidad}</Badge>
                   <span className="truncate" title={t.problema}>{t.problema}</span>
+                  <span
+                    className="hidden shrink-0 rounded bg-surface-soft px-1.5 py-0.5 font-mono text-[10px] text-content-muted md:inline"
+                    title={t.hosts.map((h) => `${h.host} (${h.total})`).join(", ")}
+                  >
+                    {t.hosts[0]?.host || "sin máquina"}
+                    {t.hosts.length > 1 ? ` +${t.hosts.length - 1}` : ""}
+                  </span>
                 </span>
                 <span className="flex shrink-0 items-center gap-3">
                   <span className="tabular-nums text-content-muted">{t.ocurrencias}</span>
@@ -207,7 +266,7 @@ export default function GraylogPage() {
           <thead>
             <tr>
               <th>Severidad</th><th>Problema</th><th>Aplicación</th>
-              <th>Servicio</th><th>Ocurrencias</th><th>Primera</th><th>Última</th><th></th>
+              <th>Servicio</th><th>Máquina</th><th>Ocurrencias</th><th>Primera</th><th>Última</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -217,6 +276,7 @@ export default function GraylogPage() {
                 <td className="max-w-[420px]">{fp.template || fp.exception_type}</td>
                 <td>{fp.aplicacion}</td>
                 <td>{fp.servicio || "—"}</td>
+                <td><HostCell hosts={fp.hosts} /></td>
                 <td>{fp.ocurrencias}</td>
                 <td>{formatDateTime(fp.primera)}</td>
                 <td>{formatDateTime(fp.ultima)}</td>
@@ -231,7 +291,7 @@ export default function GraylogPage() {
               </tr>
             ))}
             {items.length === 0 ? (
-              <tr><td colSpan={8} className="text-content-muted">Sin fingerprints. Pulsa “Sincronizar y agrupar”.</td></tr>
+              <tr><td colSpan={9} className="text-content-muted">Sin fingerprints. Pulsa “Sincronizar y agrupar”.</td></tr>
             ) : null}
           </tbody>
         </table>

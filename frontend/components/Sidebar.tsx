@@ -10,6 +10,7 @@ const ANALISIS: Item[] = [
   { href: "/redmine", label: "Redmine", color: "#2c8c3a" },
   { href: "/cerradura", label: "Cerradura Yale", color: "#f6a500" },
   { href: "/accesos", label: "Control de Acceso", color: "#7c3aed" },
+  { href: "/nagios", label: "Nagios", color: "#d93025" },
 ];
 
 export default function Sidebar() {

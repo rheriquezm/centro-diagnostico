@@ -3,9 +3,10 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.connectors.redmine import RedmineClient, RedmineError
+from app.core.config import settings
 from app.core.security import get_current_user
 from app.db.database import get_db
-from app.db.models import Ticket
+from app.db.models import Ticket, TicketJournal
 from app.services.redmine_sync import sync_tickets
 
 router = APIRouter(
@@ -109,6 +110,18 @@ def list_tickets(
             stmt.order_by(Ticket.updated_on.desc().nullslast()).offset(skip).limit(limit)
         ).scalars()
     )
+
+    ids = [t.id for t in items]
+    counts: dict[int, int] = {}
+    if ids:
+        filas = db.execute(
+            select(TicketJournal.ticket_id, func.count())
+            .where(TicketJournal.ticket_id.in_(ids))
+            .group_by(TicketJournal.ticket_id)
+        ).all()
+        counts = {ticket_id: int(cantidad) for ticket_id, cantidad in filas}
+
+    base_url = (settings.REDMINE_URL or "").rstrip("/")
     return {
         "total": total,
         "items": [
@@ -126,6 +139,8 @@ def list_tickets(
                 "created_on": t.created_on,
                 "updated_on": t.updated_on,
                 "closed_on": t.closed_on,
+                "iteraciones": counts.get(t.id, 0),
+                "url": f"{base_url}/issues/{t.redmine_id}" if base_url else "",
             }
             for t in items
         ],

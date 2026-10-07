@@ -104,6 +104,10 @@ class RedmineClient:
             for p in data.get("projects", [])
         ]
 
+    def get_issue(self, issue_id: int, include: str = "journals") -> dict:
+        data = self._get(f"/issues/{issue_id}", {"include": include})
+        return data.get("issue", {})
+
     def iter_issues(
         self,
         status_id: str = "*",

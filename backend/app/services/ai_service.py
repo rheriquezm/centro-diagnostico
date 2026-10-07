@@ -13,9 +13,11 @@ from app.core.config import settings
 from app.db.models import (
     AiDiagnosis,
     Correlation,
+    ErrorBucket,
     ErrorFingerprint,
     Finding,
     Ticket,
+    TicketJournal,
 )
 from app.services.ai.factory import get_provider
 from app.services.text import idf, tokenize
@@ -131,6 +133,14 @@ def build_context(db: Session, fingerprint_id: int) -> dict | None:
         ).scalars()
     ]
 
+    hosts = db.execute(
+        select(ErrorBucket.host, func.sum(ErrorBucket.count))
+        .where(ErrorBucket.fingerprint_id == fingerprint_id)
+        .group_by(ErrorBucket.host)
+        .order_by(func.sum(ErrorBucket.count).desc())
+    ).all()
+    machines = [host for host, _ in hosts if host]
+
     return {
         "fingerprint": fp.fingerprint,
         "error": (fp.sample_message or "")[: settings.AI_MAX_STACK_CHARS],
@@ -149,6 +159,7 @@ def build_context(db: Session, fingerprint_id: int) -> dict | None:
         "related_tickets": relacionados,
         "historical_occurrences": fp.occurrences_total,
         "findings": findings,
+        "machines": machines,
     }
 
 
@@ -160,7 +171,37 @@ def _validate_citations(analysis: dict, context: dict) -> tuple[dict, list[int]]
     return analysis, inventados
 
 
-def diagnose(db: Session, fingerprint_id: int) -> dict | None:
+def _nagios_context() -> dict | None:
+    """Estado actual de Nagios (hosts + servicios con problemas) para el analisis cruzado."""
+    try:
+        from app.connectors.nagios import NagiosClient
+
+        client = NagiosClient()
+        if not client.is_configured():
+            return None
+        hosts = client.hosts()
+        services = client.services()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("no se pudo obtener contexto de Nagios: %s", exc)
+        return None
+
+    problemas = [
+        {"host": s["host"], "servicio": s["servicio"], "estado": s["estado"]}
+        for s in services
+        if s["estado"] != "OK"
+    ]
+    return {
+        "hosts": [{"host": h["host"], "estado": h["estado"]} for h in hosts],
+        "servicios_con_problema": problemas,
+        "conteo": {
+            "hosts": len(hosts),
+            "servicios": len(services),
+            "problemas": len(problemas),
+        },
+    }
+
+
+def diagnose(db: Session, fingerprint_id: int, provider_name: str | None = None) -> dict | None:
     context = build_context(db, fingerprint_id)
     if context is None:
         return None
@@ -169,7 +210,10 @@ def diagnose(db: Session, fingerprint_id: int) -> dict | None:
     if not context.get("related_tickets"):
         context["related_tickets"] = _suggest_tickets(db, fingerprint_id)
 
-    provider = get_provider()
+    # Analisis cruzado: estado actual de Nagios.
+    context["nagios"] = _nagios_context()
+
+    provider = get_provider(provider_name)
     try:
         analysis = _call_with_timeout(
             provider.diagnose, context, timeout=settings.AI_TIMEOUT_SECONDS
@@ -218,6 +262,118 @@ def diagnose(db: Session, fingerprint_id: int) -> dict | None:
     }
 
 
+def diagnose_ticket(
+    db: Session, ticket_id: int, provider_name: str | None = None
+) -> dict | None:
+    ticket = db.get(Ticket, ticket_id)
+    if ticket is None:
+        return None
+
+    journals = list(
+        db.execute(
+            select(TicketJournal)
+            .where(TicketJournal.ticket_id == ticket_id)
+            .order_by(TicketJournal.created_on)
+        ).scalars()
+    )
+    history = [j.notes for j in journals if j.notes]
+    texto = " ".join([ticket.subject or "", ticket.description or ""] + history)
+
+    context = {
+        "tipo": "ticket",
+        "redmine_id": ticket.redmine_id,
+        "subject": ticket.subject,
+        "description": (ticket.description or "")[: settings.AI_MAX_STACK_CHARS],
+        "project": ticket.project_name,
+        "tracker": ticket.tracker,
+        "status": ticket.status,
+        "priority": ticket.priority,
+        "assigned_to": ticket.assigned_to,
+        "iteraciones": len(journals),
+        "history": [h[:600] for h in history][:20],
+        # claves compatibles con el motor heuristico
+        "summary": f"Caso Redmine #{ticket.redmine_id}: {ticket.subject}",
+        "error": (ticket.description or "")[: settings.AI_MAX_STACK_CHARS],
+        "normalized_error": texto[: settings.AI_MAX_STACK_CHARS],
+        "stack_trace": "\n".join(history)[: settings.AI_MAX_STACK_CHARS],
+        "application": ticket.project_name,
+        "service": ticket.tracker,
+        "class": ticket.project_name,
+        "method": ticket.tracker,
+        "severity": ticket.priority,
+        "frequency": len(journals),
+        "exception": None,
+        "related_tickets": [],
+    }
+
+    provider = get_provider(provider_name)
+    try:
+        analysis = _call_with_timeout(
+            provider.diagnose, context, timeout=settings.AI_TIMEOUT_SECONDS
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("fallo proveedor IA (%s) en ticket: %s", provider.name, exc)
+        from app.services.ai.heuristic import HeuristicProvider
+
+        provider = HeuristicProvider()
+        analysis = provider.diagnose(context)
+        analysis["advertencia"] = (
+            "La IA no respondio a tiempo; se muestra el diagnostico heuristico."
+        )
+
+    correlations = list(
+        db.execute(
+            select(Correlation)
+            .where(Correlation.ticket_id == ticket_id)
+            .order_by(Correlation.score.desc())
+            .limit(10)
+        ).scalars()
+    )
+    fingerprints = {fp.id: fp for fp in db.execute(select(ErrorFingerprint)).scalars()}
+    relacionados = [
+        {
+            "fingerprint_id": c.fingerprint_id,
+            "problema": (
+                fingerprints[c.fingerprint_id].template
+                or fingerprints[c.fingerprint_id].exception_type
+                or "—"
+            ),
+            "severidad": fingerprints[c.fingerprint_id].severity,
+            "similitud": c.score,
+        }
+        for c in correlations
+        if c.fingerprint_id in fingerprints
+    ]
+
+    input_hash = sha1(json.dumps(context, ensure_ascii=False).encode("utf-8")).hexdigest()
+    db.add(
+        AiDiagnosis(
+            fingerprint_id=None,
+            provider=provider.name,
+            model=getattr(provider, "model", None),
+            prompt_version=PROMPT_VERSION,
+            input_hash=input_hash,
+            output=json.dumps(analysis, ensure_ascii=False),
+            confidence=float(analysis["confidence"])
+            if isinstance(analysis.get("confidence"), (int, float))
+            else None,
+        )
+    )
+    db.commit()
+
+    return {
+        "ticket_id": ticket_id,
+        "redmine_id": ticket.redmine_id,
+        "subject": ticket.subject,
+        "provider": provider.name,
+        "model": getattr(provider, "model", None),
+        "analysis": analysis,
+        "confidence": analysis.get("confidence"),
+        "related_fingerprints": relacionados,
+        "aviso": "El diagnostico es una hipotesis asistida; no constituye certeza.",
+    }
+
+
 def _global_summary(db: Session) -> dict:
     total_fp = int(db.execute(select(func.count(ErrorFingerprint.id))).scalar_one())
     abiertos = int(
@@ -239,7 +395,7 @@ def _global_summary(db: Session) -> dict:
     }
 
 
-def assistant(db: Session, question: str) -> dict:
+def assistant(db: Session, question: str, provider_name: str | None = None) -> dict:
     from app.services import problems
 
     resumen = _global_summary(db)
@@ -259,7 +415,7 @@ def assistant(db: Session, question: str) -> dict:
         ],
     }
 
-    provider = get_provider()
+    provider = get_provider(provider_name)
     try:
         result = _call_with_timeout(
             provider.answer, question, contexto, timeout=settings.AI_TIMEOUT_SECONDS

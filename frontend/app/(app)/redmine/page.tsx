@@ -4,10 +4,13 @@ import { useCallback, useEffect, useState } from "react";
 
 import Badge from "@/components/Badge";
 import BarList from "@/components/BarList";
+import ConnectorStatusBar from "@/components/ConnectorStatusBar";
+import DiagnosisModal from "@/components/DiagnosisModal";
 import Donut from "@/components/Donut";
 import KpiCard from "@/components/KpiCard";
 import { api } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
+import { useConnections } from "@/lib/useConnections";
 
 type Ticket = {
   id: number;
@@ -20,6 +23,8 @@ type Ticket = {
   assigned_to: string | null;
   subject: string;
   updated_on: string | null;
+  iteraciones: number;
+  url: string;
 };
 
 type Grupo = { nombre: string; total: number };
@@ -43,6 +48,10 @@ export default function RedminePage() {
   const [openOnly, setOpenOnly] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [selectedTicket, setSelectedTicket] = useState<number | null>(null);
+  const { data: conn, refresh: refreshConn, runSync } = useConnections();
 
   const load = useCallback(async () => {
     try {
@@ -69,22 +78,41 @@ export default function RedminePage() {
 
   async function testConnection() {
     setError(null);
+    setMessage(null);
+    setTesting(true);
     try {
       const info = await api.get<{ login: string }>("/api/redmine/test");
       setMessage(`Conexión OK · usuario ${info.login}`);
+      await refreshConn();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error");
+    } finally {
+      setTesting(false);
     }
   }
 
   async function sync() {
     setError(null);
+    setMessage("Sincronización iniciada; procesando…");
+    setSyncing(true);
     try {
-      const r = await api.post<{ status: string }>("/api/redmine/sync?max_issues=500", {});
-      setMessage(`Sincronización ${r.status}. Se actualizará la lista al finalizar.`);
-      setTimeout(load, 8000);
+      const run = await runSync("redmine", () =>
+        api.post("/api/redmine/sync?max_issues=500", {})
+      );
+      if (run && run.status === "error") {
+        setError(run.error || "La sincronización falló.");
+        setMessage(null);
+      } else if (run) {
+        setMessage(`Sincronización completada · ${run.items} tickets procesados.`);
+      } else {
+        setMessage("Sincronización en curso; el estado se actualizará en breve.");
+      }
+      await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error");
+      setMessage(null);
+    } finally {
+      setSyncing(false);
     }
   }
 
@@ -96,10 +124,20 @@ export default function RedminePage() {
           <p className="text-sm text-content-muted">Tickets de incidencias y requerimientos.</p>
         </div>
         <div className="flex gap-2">
-          <button className="btn-ghost" onClick={testConnection}>Probar conexión</button>
-          <button className="btn-primary" onClick={sync}>Sincronizar</button>
+          <button className="btn-ghost" onClick={testConnection} disabled={testing || syncing}>
+            {testing ? "Probando…" : "Probar conexión"}
+          </button>
+          <button className="btn-primary" onClick={sync} disabled={syncing}>
+            {syncing ? "Sincronizando…" : "Sincronizar"}
+          </button>
         </div>
       </div>
+
+      <ConnectorStatusBar
+        info={conn?.connectors?.redmine}
+        scheduler={conn?.scheduler}
+        busy={syncing}
+      />
 
       {message ? <div className="card text-gob-info">{message}</div> : null}
       {error ? <div className="card text-gob-error">{error}</div> : null}
@@ -156,14 +194,29 @@ export default function RedminePage() {
         <table className="table">
           <thead>
             <tr>
-              <th>#</th><th>Proyecto</th><th>Asunto</th><th>Estado</th>
-              <th>Prioridad</th><th>Asignado</th><th>Actualizado</th>
+              <th>#</th><th>Iteraciones</th><th>Proyecto</th><th>Asunto</th><th>Estado</th>
+              <th>Prioridad</th><th>Asignado</th><th>Actualizado</th><th></th>
             </tr>
           </thead>
           <tbody>
             {tickets.map((t) => (
               <tr key={t.id}>
-                <td>{t.redmine_id}</td>
+                <td>
+                  {t.url ? (
+                    <a
+                      href={t.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-medium text-gob-info hover:underline"
+                      title="Abrir el caso en Redmine"
+                    >
+                      {t.redmine_id}
+                    </a>
+                  ) : (
+                    t.redmine_id
+                  )}
+                </td>
+                <td className="tabular-nums">{t.iteraciones}</td>
                 <td>{t.project_name}</td>
                 <td className="max-w-[360px]">{t.subject}</td>
                 <td>
@@ -172,14 +225,26 @@ export default function RedminePage() {
                 <td>{t.priority}</td>
                 <td>{t.assigned_to || "—"}</td>
                 <td>{formatDateTime(t.updated_on)}</td>
+                <td>
+                  <button
+                    className="btn-ghost px-2 py-1 text-xs"
+                    onClick={() => setSelectedTicket(t.id)}
+                  >
+                    IA
+                  </button>
+                </td>
               </tr>
             ))}
             {tickets.length === 0 ? (
-              <tr><td colSpan={7} className="text-content-muted">Sin tickets. Pulsa “Sincronizar”.</td></tr>
+              <tr><td colSpan={9} className="text-content-muted">Sin tickets. Pulsa “Sincronizar”.</td></tr>
             ) : null}
           </tbody>
         </table>
       </div>
+
+      {selectedTicket !== null ? (
+        <DiagnosisModal ticketId={selectedTicket} onClose={() => setSelectedTicket(null)} />
+      ) : null}
     </div>
   );
 }

@@ -5,10 +5,12 @@ import { useCallback, useEffect, useState } from "react";
 import Badge from "@/components/Badge";
 import BarChart from "@/components/BarChart";
 import BarList from "@/components/BarList";
+import ConnectorStatusBar from "@/components/ConnectorStatusBar";
 import Donut from "@/components/Donut";
 import KpiCard from "@/components/KpiCard";
 import { api } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
+import { useConnections } from "@/lib/useConnections";
 
 function serieHoras(items: Array<{ hora: number; total: number }>) {
   const map = new Map(items.map((i) => [i.hora, i.total]));
@@ -36,15 +38,31 @@ type Resumen = {
   por_hora: Array<{ hora: number; total: number }>;
 };
 
+type YaleDevice = {
+  device_id: number;
+  description: string;
+  category: string | null;
+  model: string | null;
+  online: boolean;
+  low_battery: boolean;
+  state: number | null;
+  firmware: string | null;
+  home: string | null;
+};
+
 export default function CerraduraPage() {
   const [dias, setDias] = useState(7);
   const [records, setRecords] = useState<Record[]>([]);
   const [resumen, setResumen] = useState<Resumen | null>(null);
+  const [devices, setDevices] = useState<YaleDevice[]>([]);
   const [puerta, setPuerta] = useState("");
   const [usuario, setUsuario] = useState("");
   const [estado, setEstado] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const { data: conn, refresh: refreshConn, runSync } = useConnections();
 
   const load = useCallback(async () => {
     try {
@@ -67,24 +85,55 @@ export default function CerraduraPage() {
     load();
   }, [load]);
 
+  const loadDevices = useCallback(async () => {
+    try {
+      const data = await api.get<{ devices: YaleDevice[] }>("/api/yale/devices");
+      setDevices(data.devices);
+    } catch {
+      // informativo; no bloquea la vista
+    }
+  }, []);
+
+  useEffect(() => {
+    loadDevices();
+  }, [loadDevices]);
+
   async function testConnection() {
     setError(null);
+    setMessage(null);
+    setTesting(true);
     try {
       const info = await api.get<{ homes: Array<{ description: string }> }>("/api/yale/test");
       setMessage(`Conexión OK · hogares: ${info.homes.map((h) => h.description).join(", ")}`);
+      await refreshConn();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error");
+    } finally {
+      setTesting(false);
     }
   }
 
   async function sync() {
     setError(null);
+    setMessage("Sincronización iniciada; procesando…");
+    setSyncing(true);
     try {
-      await api.post(`/api/yale/sync?days=${dias}`, {});
-      setMessage("Sincronización iniciada; se actualizará en breve.");
-      setTimeout(load, 12000);
+      const run = await runSync("yale", () => api.post(`/api/yale/sync?days=${dias}`, {}));
+      if (run && run.status === "error") {
+        setError(run.error || "La sincronización falló.");
+        setMessage(null);
+      } else if (run) {
+        setMessage(`Sincronización completada · ${run.items} registros nuevos.`);
+      } else {
+        setMessage("Sincronización en curso; el estado se actualizará en breve.");
+      }
+      await load();
+      await loadDevices();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error");
+      setMessage(null);
+    } finally {
+      setSyncing(false);
     }
   }
 
@@ -98,10 +147,20 @@ export default function CerraduraPage() {
             <option value={7}>7 días</option>
             <option value={30}>30 días</option>
           </select>
-          <button className="btn-ghost" onClick={testConnection}>Probar conexión</button>
-          <button className="btn-primary" onClick={sync}>Sincronizar</button>
+          <button className="btn-ghost" onClick={testConnection} disabled={testing || syncing}>
+            {testing ? "Probando…" : "Probar conexión"}
+          </button>
+          <button className="btn-primary" onClick={sync} disabled={syncing}>
+            {syncing ? "Sincronizando…" : "Sincronizar"}
+          </button>
         </div>
       </div>
+
+      <ConnectorStatusBar
+        info={conn?.connectors?.yale}
+        scheduler={conn?.scheduler}
+        busy={syncing}
+      />
 
       {message ? <div className="card text-gob-info">{message}</div> : null}
       {error ? <div className="card text-gob-error">{error}</div> : null}
@@ -111,6 +170,60 @@ export default function CerraduraPage() {
         <KpiCard label="Aperturas" value={resumen?.aperturas ?? "—"} />
         <KpiCard label="Cierres" value={resumen?.cierres ?? "—"} />
       </div>
+
+      {devices.some((d) => d.category === "Lock" && d.low_battery) ? (
+        <div className="card text-gob-warning">
+          Atención: hay candados con batería baja. Reemplaza las pilas a la brevedad.
+        </div>
+      ) : null}
+
+      <section>
+        <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-content-muted">
+          Estado de dispositivos y batería
+        </h3>
+        <p className="mb-3 text-xs text-content-muted">
+          Yale reporta el estado de batería (correcta / baja), no un porcentaje exacto de carga.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {devices.map((d) => (
+            <div key={d.device_id} className="card space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-content" title={d.description}>
+                    {d.description}
+                  </p>
+                  <p className="text-xs text-content-muted">{d.model || d.category}</p>
+                </div>
+                <span
+                  className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${
+                    d.online ? "bg-gob-success" : "bg-gob-error"
+                  }`}
+                  title={d.online ? "En línea" : "Sin conexión"}
+                />
+              </div>
+              {d.category === "Lock" ? (
+                <div className="flex items-center justify-between text-xs">
+                  <Badge tone={d.low_battery ? "error" : "success"}>
+                    {d.low_battery ? "Batería baja" : "Batería correcta"}
+                  </Badge>
+                  <span className={d.online ? "text-gob-success" : "text-gob-error"}>
+                    {d.online ? "En línea" : "Sin conexión"}
+                  </span>
+                </div>
+              ) : (
+                <p className="text-xs text-content-muted">
+                  {d.category} · {d.online ? "en línea" : "sin conexión"}
+                </p>
+              )}
+            </div>
+          ))}
+          {devices.length === 0 ? (
+            <p className="text-sm text-content-muted">
+              Sin información de dispositivos. Pulsa «Probar conexión».
+            </p>
+          ) : null}
+        </div>
+      </section>
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="card">

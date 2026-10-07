@@ -36,6 +36,41 @@ def test_connection() -> dict:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
+@router.get("/devices")
+def devices() -> dict:
+    """Dispositivos del hogar Yale (candados + gateway) con estado de batería.
+
+    El API expone `lowBattery` (alerta de batería), no un porcentaje.
+    """
+    try:
+        client = YaleClient()
+        data = client.login()
+        homes = (data.get("accountData") or {}).get("homeList", [])
+        lista: list[dict] = []
+        for home in homes:
+            for device in home.get("deviceList") or []:
+                params = device.get("deviceParameters") or {}
+                firmware = (device.get("currentFirmwareVersion") or "").strip()
+                lista.append(
+                    {
+                        "device_id": device.get("deviceId"),
+                        "description": device.get("description"),
+                        "category": device.get("category"),
+                        "model": device.get("deviceModelDescription"),
+                        "online": bool(device.get("isOnline")),
+                        "low_battery": bool(
+                            device.get("lowBattery") or params.get("lowBattery")
+                        ),
+                        "state": device.get("state"),
+                        "firmware": firmware or None,
+                        "home": home.get("description"),
+                    }
+                )
+        return {"devices": lista}
+    except YaleError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
 @router.post("/sync")
 def sync(
     background: BackgroundTasks,

@@ -5,10 +5,12 @@ import { useCallback, useEffect, useState } from "react";
 
 import Badge from "@/components/Badge";
 import BarChart from "@/components/BarChart";
+import ConnectorStatusBar from "@/components/ConnectorStatusBar";
 import Donut from "@/components/Donut";
 import KpiCard from "@/components/KpiCard";
 import { api } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
+import { useConnections } from "@/lib/useConnections";
 
 type Summary = {
   errores_24h: number;
@@ -79,6 +81,7 @@ export default function DashboardPage() {
   const [trend, setTrend] = useState<Trend | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const { data: conn } = useConnections();
 
   const load = useCallback(async () => {
     try {
@@ -180,6 +183,17 @@ export default function DashboardPage() {
           <KpiCard label="Tickets cerrados" value={summary.tickets_cerrados} />
           <KpiCard label="Errores sin ticket" value={summary.errores_sin_ticket} />
           <KpiCard label="Posibles reincidencias" value={summary.reincidencias} />
+        </div>
+      </section>
+
+      <section>
+        <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-content-muted">
+          Estado de conexiones
+        </h3>
+        <div className="space-y-3">
+          {["graylog", "redmine", "yale", "zkbio"].map((key) => (
+            <ConnectorStatusBar key={key} info={conn?.connectors?.[key]} />
+          ))}
         </div>
       </section>
 

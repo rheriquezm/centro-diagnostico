@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.connectors.graylog import GraylogClient, GraylogError
 from app.core.security import get_current_user
 from app.db.database import get_db
-from app.db.models import ErrorFingerprint
+from app.db.models import ErrorBucket, ErrorFingerprint
 from app.services.graylog_sync import sync_graylog
 
 router = APIRouter(
@@ -13,6 +13,28 @@ router = APIRouter(
     tags=["graylog"],
     dependencies=[Depends(get_current_user)],
 )
+
+
+def _hosts_map(db: Session, ids: list[int]) -> dict[int, list[dict]]:
+    """Maquinas/servidores donde ocurre cada fingerprint (desde los buckets)."""
+    if not ids:
+        return {}
+    filas = db.execute(
+        select(
+            ErrorBucket.fingerprint_id,
+            ErrorBucket.host,
+            func.sum(ErrorBucket.count),
+        )
+        .where(ErrorBucket.fingerprint_id.in_(ids))
+        .group_by(ErrorBucket.fingerprint_id, ErrorBucket.host)
+        .order_by(func.sum(ErrorBucket.count).desc())
+    ).all()
+    mapa: dict[int, list[dict]] = {}
+    for fp_id, host, total in filas:
+        if not host:
+            continue
+        mapa.setdefault(fp_id, []).append({"host": host, "total": int(total)})
+    return mapa
 
 
 @router.get("/test")
@@ -100,6 +122,7 @@ def resumen(db: Session = Depends(get_db)) -> dict:
             .limit(10)
         ).scalars()
     )
+    hosts_map = _hosts_map(db, [fp.id for fp in top])
 
     return {
         "total": total,
@@ -120,6 +143,7 @@ def resumen(db: Session = Depends(get_db)) -> dict:
                 "servicio": fp.service,
                 "severidad": fp.severity,
                 "ocurrencias": fp.occurrences_total,
+                "hosts": hosts_map.get(fp.id, []),
             }
             for fp in top
         ],
@@ -135,6 +159,7 @@ def fingerprints(
     if severidad:
         stmt = stmt.where(ErrorFingerprint.severity == severidad)
     items = list(db.execute(stmt.limit(200)).scalars())
+    hosts_map = _hosts_map(db, [fp.id for fp in items])
     return {
         "total": len(items),
         "items": [
@@ -149,6 +174,7 @@ def fingerprints(
                 "primera": fp.first_seen,
                 "ultima": fp.last_seen,
                 "template": fp.template,
+                "hosts": hosts_map.get(fp.id, []),
             }
             for fp in items
         ],

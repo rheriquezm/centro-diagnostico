@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select
 
-from app.connectors.redmine import RedmineClient
+from app.connectors.redmine import RedmineClient, RedmineError
 from app.db.database import SessionLocal
 from app.db.models import SyncRun, Ticket, TicketJournal
 
@@ -68,37 +68,53 @@ def sync_tickets(max_issues: int = 500, include_journals: bool = True) -> dict:
             t.redmine_id: t for t in db.execute(select(Ticket)).scalars().all()
         }
         total = nuevos = actualizados = 0
+        journals_fetched = 0
         include = "journals" if include_journals else None
 
         for issue in client.iter_issues(max_issues=max_issues, include=include):
             total += 1
             data = _to_ticket(issue)
             ticket = existing.get(data["redmine_id"])
+            needs_detail = False
             if ticket is None:
                 ticket = Ticket(**data)
                 db.add(ticket)
                 db.flush()
                 existing[data["redmine_id"]] = ticket
                 nuevos += 1
+                needs_detail = True
             else:
+                # El listado de Redmine no incluye journals; se piden a la ficha
+                # cuando el ticket cambió o aún no tiene iteraciones guardadas.
+                needs_detail = (
+                    ticket.updated_on != data["updated_on"] or not ticket.journals
+                )
                 for field, value in data.items():
                     setattr(ticket, field, value)
                 actualizados += 1
 
-            if include_journals and issue.get("journals"):
-                ticket.journals.clear()
-                for journal in issue.get("journals") or []:
-                    notes = journal.get("notes")
-                    if not notes:
-                        continue
-                    ticket.journals.append(
-                        TicketJournal(
-                            journal_id=journal.get("id"),
-                            author=(journal.get("user") or {}).get("name"),
-                            notes=notes,
-                            created_on=_parse_dt(journal.get("created_on")),
+            if include_journals and needs_detail:
+                try:
+                    detalle = client.get_issue(data["redmine_id"])
+                    journals = detalle.get("journals") or []
+                    ticket.journals.clear()
+                    for journal in journals:
+                        ticket.journals.append(
+                            TicketJournal(
+                                journal_id=journal.get("id"),
+                                author=(journal.get("user") or {}).get("name"),
+                                notes=journal.get("notes"),
+                                created_on=_parse_dt(journal.get("created_on")),
+                            )
                         )
+                    journals_fetched += 1
+                except RedmineError as exc:
+                    logger.warning(
+                        "no se pudo obtener journals de %s: %s",
+                        data["redmine_id"],
+                        exc,
                     )
+
             if total % 50 == 0:
                 db.commit()
 
@@ -107,8 +123,19 @@ def sync_tickets(max_issues: int = 500, include_journals: bool = True) -> dict:
         run.items = total
         run.finished_at = datetime.now(timezone.utc)
         db.commit()
-        logger.info("redmine sync total=%s nuevos=%s act=%s", total, nuevos, actualizados)
-        return {"total": total, "nuevos": nuevos, "actualizados": actualizados}
+        logger.info(
+            "redmine sync total=%s nuevos=%s act=%s journals=%s",
+            total,
+            nuevos,
+            actualizados,
+            journals_fetched,
+        )
+        return {
+            "total": total,
+            "nuevos": nuevos,
+            "actualizados": actualizados,
+            "journals": journals_fetched,
+        }
     except Exception as exc:  # noqa: BLE001
         db.rollback()
         run.status = "error"

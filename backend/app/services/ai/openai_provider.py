@@ -15,9 +15,13 @@ class OpenAIProvider(AIProvider):
     name = "openai"
 
     def __init__(self):
-        self.base_url = (settings.AI_BASE_URL or "https://api.openai.com/v1").rstrip("/")
-        self.model = settings.AI_MODEL or "gpt-4o-mini"
-        self.api_key = settings.AI_API_KEY
+        self.base_url = (
+            settings.OPENAI_BASE_URL
+            or settings.AI_BASE_URL
+            or "https://api.openai.com/v1"
+        ).rstrip("/")
+        self.model = settings.OPENAI_MODEL or "gpt-4o-mini"
+        self.api_key = settings.OPENAI_API_KEY or settings.AI_API_KEY
 
     def _chat(self, system: str, user: str) -> dict:
         response = requests.post(

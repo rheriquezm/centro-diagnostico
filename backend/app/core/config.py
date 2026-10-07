@@ -47,6 +47,16 @@ class Settings(BaseSettings):
     AI_MAX_STACK_CHARS: int = 1200
     AI_VERIFY_SSL: bool = True
 
+    # Proveedor ChatGPT (OpenAI) - seleccionable por analisis
+    OPENAI_API_KEY: str = ""
+    OPENAI_BASE_URL: str = "https://api.openai.com/v1"
+    OPENAI_MODEL: str = "gpt-4o-mini"
+
+    # Proveedor Claude (Anthropic) - seleccionable por analisis
+    ANTHROPIC_API_KEY: str = ""
+    ANTHROPIC_BASE_URL: str = "https://api.anthropic.com/v1"
+    ANTHROPIC_MODEL: str = "claude-3-5-sonnet-latest"
+
     SYNC_LOOKBACK_HOURS: int = 24
     FINGERPRINT_SAMPLES: int = 5
 
@@ -75,6 +85,12 @@ class Settings(BaseSettings):
     ZKBIO_TIMEOUT: int = 60
     ZKBIO_SYNC_DAYS: int = 7
     ZKBIO_PAGE_SIZE: int = 200000
+
+    NAGIOS_URL: str = "https://adp.serviciocivil.cl/nagios/cgi-bin"
+    NAGIOS_USER: str = ""
+    NAGIOS_PASSWORD: str = ""
+    NAGIOS_VERIFY_SSL: bool = False
+    NAGIOS_TIMEOUT: int = 40
 
     @property
     def cors_origins(self) -> list[str]:

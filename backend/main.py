@@ -12,6 +12,7 @@ from app.api import (
     graylog,
     health,
     knowledge,
+    nagios,
     pipeline,
     problems,
     redmine,
@@ -87,3 +88,4 @@ app.include_router(knowledge.router, prefix="/api")
 app.include_router(search.router, prefix="/api")
 app.include_router(yale.router, prefix="/api")
 app.include_router(zkbio.router, prefix="/api")
+app.include_router(nagios.router, prefix="/api")
