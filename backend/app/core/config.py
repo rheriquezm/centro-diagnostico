@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     ANTHROPIC_BASE_URL: str = "https://api.anthropic.com/v1"
     ANTHROPIC_MODEL: str = "claude-3-5-sonnet-latest"
 
+    # Proveedor Google Gemini (tier gratuito) - seleccionable por analisis
+    GEMINI_API_KEY: str = ""
+    GEMINI_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta"
+    GEMINI_MODEL: str = "gemini-3.5-flash"
+
     SYNC_LOOKBACK_HOURS: int = 24
     FINGERPRINT_SAMPLES: int = 5
 

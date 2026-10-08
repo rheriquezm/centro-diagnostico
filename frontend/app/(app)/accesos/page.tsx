@@ -34,6 +34,15 @@ const RANGOS = [
   { value: "90d", label: "90 días" },
 ];
 
+// Rango propio para la sección de "no registrados" ("" = seguir el global)
+const RANGOS_NO_REG = [
+  { value: "1h", label: "1 h" },
+  { value: "8h", label: "8 h" },
+  { value: "12h", label: "12 h" },
+  { value: "24h", label: "24 h" },
+  { value: "", label: "Global" },
+];
+
 function rangeQuery(rango: string): string {
   const n = parseInt(rango, 10);
   const q = new URLSearchParams();
@@ -112,6 +121,39 @@ type UsuarioHist = {
   }>;
 };
 
+type AnalisisItem = {
+  fecha: string | null;
+  usuario: string;
+  pin: string | null;
+  tarjeta: string | null;
+  dispositivo: string | null;
+  area: string | null;
+  evento: string | null;
+  modo: string | null;
+  lector: string | null;
+  direccion: string | null;
+};
+
+type AnalisisDisp = {
+  nombre: string;
+  total: number;
+  entradas: number;
+  salidas: number;
+  sin_registro: number;
+};
+
+type Analisis = {
+  horas: number;
+  dispositivo: string | null;
+  total: number;
+  dispositivos: AnalisisDisp[];
+  movimientos: AnalisisItem[];
+  falsos_positivos: AnalisisItem[];
+  por_evento: Grupo[];
+  total_movimientos: number;
+  total_falsos: number;
+};
+
 function esDenegado(evento: string | null): boolean {
   const texto = (evento || "").toLowerCase();
   return ["no registrado", "denegad", "rechaz", "denied", "ilegal", "caduc"].some((t) =>
@@ -135,12 +177,45 @@ function tonoEvento(evento: string | null): string {
   return "neutral";
 }
 
+function csvFecha(value: string | null): string {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(
+    d.getMinutes()
+  )}:${p(d.getSeconds())}`;
+}
+
+function descargarCSV(
+  filename: string,
+  headers: string[],
+  filas: Array<Array<string | number>>
+) {
+  const esc = (v: string | number) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const lineas = [
+    headers.map(esc).join(";"),
+    ...filas.map((f) => f.map(esc).join(";")),
+  ];
+  const csv = "\uFEFF" + lineas.join("\r\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 export default function AccesosPage() {
   const [rango, setRango] = useState("24h");
   const [records, setRecords] = useState<Record[]>([]);
   const [resumen, setResumen] = useState<Resumen | null>(null);
   const [noReg, setNoReg] = useState<NoRegData | null>(null);
   const [usuarios, setUsuarios] = useState<UsuarioItem[]>([]);
+  const [noRegRango, setNoRegRango] = useState("");
   const [expandido, setExpandido] = useState<string | null>(null);
   const [filtroTarjeta, setFiltroTarjeta] = useState("");
   const [filtroPin, setFiltroPin] = useState("");
@@ -151,6 +226,9 @@ export default function AccesosPage() {
   const [incluirNoReg, setIncluirNoReg] = useState(false);
   const [usuarioSel, setUsuarioSel] = useState<string | null>(null);
   const [usuarioHist, setUsuarioHist] = useState<UsuarioHist | null>(null);
+  const [analisis, setAnalisis] = useState<Analisis | null>(null);
+  const [analisisHoras, setAnalisisHoras] = useState(24);
+  const [analisisDispositivo, setAnalisisDispositivo] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -168,16 +246,15 @@ export default function AccesosPage() {
       if (filtroTarjeta) params.set("tarjeta", filtroTarjeta);
       if (filtroPin) params.set("pin", filtroPin);
       params.set("excluir_no_registrados", incluirNoReg ? "false" : "true");
+      params.set("limit", "1000");
 
-      const [rec, res, nr, us] = await Promise.all([
+      const [rec, res, us] = await Promise.all([
         api.get<{ items: Record[] }>(`/api/zkbio/records?${params.toString()}`),
         api.get<Resumen>(`/api/zkbio/resumen?${rangeQS}`),
-        api.get<NoRegData>(`/api/zkbio/no-registrados?${rangeQS}`),
         api.get<{ items: UsuarioItem[] }>(`/api/zkbio/usuarios?${rangeQS}`),
       ]);
       setRecords(rec.items);
       setResumen(res);
-      setNoReg(nr);
       setUsuarios(us.items);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error");
@@ -187,6 +264,35 @@ export default function AccesosPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const loadNoReg = useCallback(async () => {
+    try {
+      const qs = noRegRango ? rangeQuery(noRegRango) : rangeQuery(rango);
+      const nr = await api.get<NoRegData>(`/api/zkbio/no-registrados?${qs}`);
+      setNoReg(nr);
+    } catch {
+      // informativo; no bloquea la vista
+    }
+  }, [noRegRango, rango]);
+
+  useEffect(() => {
+    loadNoReg();
+  }, [loadNoReg]);
+
+  const loadAnalisis = useCallback(async () => {
+    try {
+      const q = new URLSearchParams({ horas: String(analisisHoras) });
+      if (analisisDispositivo) q.set("dispositivo", analisisDispositivo);
+      const data = await api.get<Analisis>(`/api/zkbio/analisis?${q.toString()}`);
+      setAnalisis(data);
+    } catch {
+      // informativo; no bloquea la vista
+    }
+  }, [analisisHoras, analisisDispositivo]);
+
+  useEffect(() => {
+    loadAnalisis();
+  }, [loadAnalisis]);
 
   const loadHistorial = useCallback(
     async (pin: string) => {
@@ -238,6 +344,7 @@ export default function AccesosPage() {
         setMessage("Sincronización en curso; el estado se actualizará en breve.");
       }
       await load();
+      await loadNoReg();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error");
       setMessage(null);
@@ -267,6 +374,45 @@ export default function AccesosPage() {
       setUsuarioHist(null);
       setUsuarioSel(pin);
     }
+  }
+
+  function descargarFalsos() {
+    const items = analisis?.falsos_positivos || [];
+    if (items.length === 0) return;
+    descargarCSV(
+      `falsos_positivos_${analisisHoras}h.csv`,
+      ["Fecha", "Evento", "ID leido", "Dispositivo", "Area", "Modo", "Direccion", "Lector"],
+      items.map((f) => [
+        csvFecha(f.fecha),
+        f.evento || "",
+        f.tarjeta || f.pin || "Huella (sin ID)",
+        f.dispositivo || "",
+        f.area || "",
+        f.modo || "",
+        f.direccion || "",
+        f.lector || "",
+      ])
+    );
+  }
+
+  function descargarMovimientos() {
+    const items = analisis?.movimientos || [];
+    if (items.length === 0) return;
+    descargarCSV(
+      `movimientos_usuarios_${analisisHoras}h.csv`,
+      ["Fecha", "Usuario", "PIN", "Direccion", "Dispositivo", "Area", "Evento", "Modo", "Tarjeta"],
+      items.map((m) => [
+        csvFecha(m.fecha),
+        m.usuario,
+        m.pin || "",
+        m.direccion || "",
+        m.dispositivo || "",
+        m.area || "",
+        m.evento || "",
+        m.modo || "",
+        m.tarjeta || "",
+      ])
+    );
   }
 
   const maxNoReg = Math.max(...(noReg?.grupos.map((g) => g.total) || [1]), 1);
@@ -311,6 +457,217 @@ export default function AccesosPage() {
         <KpiCard label="Aperturas" value={resumen?.aperturas ?? "—"} />
         <KpiCard label="Intentos no registrados" value={resumen?.denegados ?? "—"} />
       </div>
+
+      {/* ---- Análisis de accesos ---- */}
+      <section className="card">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="font-medium text-content">Análisis de accesos</p>
+            <p className="text-xs text-content-muted">
+              Cuándo pasan los usuarios, falsos positivos (usuarios no registrados) y por dispositivo
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              className="input max-w-[150px]"
+              value={analisisHoras}
+              onChange={(e) => setAnalisisHoras(Number(e.target.value))}
+            >
+              {[1, 2, 4, 8, 12, 24, 48, 72, 168].map((v) => (
+                <option key={v} value={v}>
+                  {v < 24 ? `Últimas ${v} h` : `Últimas ${v / 24} d`}
+                </option>
+              ))}
+            </select>
+            <select
+              className="input max-w-[240px]"
+              value={analisisDispositivo}
+              onChange={(e) => setAnalisisDispositivo(e.target.value)}
+            >
+              <option value="">Todos los dispositivos</option>
+              {(analisis?.dispositivos || []).map((d) => (
+                <option key={d.nombre} value={d.nombre}>
+                  {d.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+          <KpiCard
+            label="Movimientos de usuarios"
+            value={analisis?.total_movimientos ?? "—"}
+            hint="Accesos con usuario identificado"
+          />
+          <KpiCard
+            label="Falsos positivos"
+            value={analisis?.total_falsos ?? "—"}
+            hint="Usuarios no registrados (sin registro en la BD)"
+          />
+          <KpiCard label="Total eventos" value={analisis?.total ?? "—"} />
+        </div>
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <div>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-content">
+                Falsos positivos (usuarios no registrados)
+              </p>
+              <button
+                className="btn-ghost px-2 py-1 text-xs"
+                onClick={descargarFalsos}
+                disabled={(analisis?.falsos_positivos || []).length === 0}
+              >
+                Descargar CSV
+              </button>
+            </div>
+            {(analisis?.falsos_positivos || []).length === 0 ? (
+              <p className="text-sm text-gob-success">Sin falsos positivos en el período.</p>
+            ) : (
+              <div className="max-h-[320px] overflow-auto">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Evento</th>
+                      <th>ID leído</th>
+                      <th>Dispositivo</th>
+                      <th>Modo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analisis!.falsos_positivos.map((f, i) => (
+                      <tr key={i}>
+                        <td>{formatDateTime(f.fecha)}</td>
+                        <td>
+                          <Badge tone="error">{f.evento || "—"}</Badge>
+                        </td>
+                        <td className="font-mono">
+                          {f.tarjeta ? (
+                            f.tarjeta
+                          ) : f.pin ? (
+                            `PIN ${f.pin}`
+                          ) : (
+                            <span className="text-content-muted">Huella (sin ID)</span>
+                          )}
+                        </td>
+                        <td>{f.dispositivo || "—"}</td>
+                        <td>{f.modo || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-content">
+                Movimientos de usuarios (cuándo pasan)
+              </p>
+              <button
+                className="btn-ghost px-2 py-1 text-xs"
+                onClick={descargarMovimientos}
+                disabled={(analisis?.movimientos || []).length === 0}
+              >
+                Descargar CSV
+              </button>
+            </div>
+            {(analisis?.movimientos || []).length === 0 ? (
+              <p className="text-sm text-content-muted">Sin movimientos identificados.</p>
+            ) : (
+              <div className="max-h-[320px] overflow-auto">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Usuario</th>
+                      <th>Dir.</th>
+                      <th>Dispositivo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analisis!.movimientos.map((m, i) => (
+                      <tr key={i}>
+                        <td>{formatDateTime(m.fecha)}</td>
+                        <td className="font-medium">{m.usuario}</td>
+                        <td>
+                          {m.direccion ? (
+                            <Badge tone={m.direccion === "Entrada" ? "success" : "info"}>
+                              {m.direccion}
+                            </Badge>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td className="text-xs text-content-muted">{m.dispositivo || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <p className="mb-2 text-sm font-semibold text-content">
+            Qué ha pasado por dispositivo
+            {analisisDispositivo ? ` · ${analisisDispositivo}` : ""}
+          </p>
+          <div className="overflow-auto">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Dispositivo</th>
+                  <th className="text-right">Total</th>
+                  <th className="text-right">Entradas</th>
+                  <th className="text-right">Salidas</th>
+                  <th className="text-right">Sin registro</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {(analisis?.dispositivos || []).map((d) => (
+                  <tr
+                    key={d.nombre}
+                    className={analisisDispositivo === d.nombre ? "bg-surface-soft" : ""}
+                  >
+                    <td>{d.nombre}</td>
+                    <td className="text-right tabular-nums">{d.total}</td>
+                    <td className="text-right tabular-nums">{d.entradas}</td>
+                    <td className="text-right tabular-nums">{d.salidas}</td>
+                    <td className="text-right tabular-nums text-gob-warning">
+                      {d.sin_registro}
+                    </td>
+                    <td>
+                      <button
+                        className="btn-ghost px-2 py-1 text-xs"
+                        onClick={() =>
+                          setAnalisisDispositivo(
+                            analisisDispositivo === d.nombre ? "" : d.nombre
+                          )
+                        }
+                      >
+                        {analisisDispositivo === d.nombre ? "Quitar" : "Ver"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {(analisis?.dispositivos || []).length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="text-content-muted">
+                      Sin datos en el período.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="card">
@@ -448,18 +805,40 @@ export default function AccesosPage() {
               {noReg?.total ?? 0} intentos · {noReg?.grupos.length ?? 0} identidades
             </p>
           </div>
-          {expandido ? (
-            <button
-              className="btn-ghost px-2 py-1 text-xs"
-              onClick={() => {
-                setExpandido(null);
-                setFiltroTarjeta("");
-                setFiltroPin("");
-              }}
-            >
-              Cerrar detalle
-            </button>
-          ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex rounded-lg border border-surface-border p-0.5">
+              {RANGOS_NO_REG.map((r) => {
+                const activo = noRegRango === r.value;
+                return (
+                  <button
+                    key={r.value || "global"}
+                    type="button"
+                    onClick={() => setNoRegRango(r.value)}
+                    title={r.value ? `Ver últimas ${r.label}` : "Usar el rango global"}
+                    className={`rounded-md px-2 py-1 text-xs font-medium transition ${
+                      activo
+                        ? "bg-gob-blue text-white"
+                        : "text-content hover:bg-surface-soft"
+                    }`}
+                  >
+                    {r.label}
+                  </button>
+                );
+              })}
+            </div>
+            {expandido ? (
+              <button
+                className="btn-ghost px-2 py-1 text-xs"
+                onClick={() => {
+                  setExpandido(null);
+                  setFiltroTarjeta("");
+                  setFiltroPin("");
+                }}
+              >
+                Cerrar detalle
+              </button>
+            ) : null}
+          </div>
         </div>
 
         {(noReg?.grupos || []).length === 0 ? (
@@ -627,14 +1006,20 @@ export default function AccesosPage() {
           load();
         }}
       >
-        <div className="min-w-[180px] flex-1">
+        <div className="min-w-[220px] flex-1">
           <label className="mb-1 block text-sm text-content-muted">Dispositivo</label>
-          <input
+          <select
             className="input"
             value={dispositivo}
             onChange={(e) => setDispositivo(e.target.value)}
-            placeholder="Piso 8"
-          />
+          >
+            <option value="">Todos los dispositivos</option>
+            {(analisis?.dispositivos || []).map((d) => (
+              <option key={d.nombre} value={d.nombre}>
+                {d.nombre}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="min-w-[150px] flex-1">
           <label className="mb-1 block text-sm text-content-muted">Área</label>

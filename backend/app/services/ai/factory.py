@@ -1,6 +1,7 @@
 from app.core.config import settings
 from app.services.ai.anthropic_provider import AnthropicProvider
 from app.services.ai.base import AIProvider
+from app.services.ai.gemini_provider import GeminiProvider
 from app.services.ai.heuristic import HeuristicProvider
 from app.services.ai.ollama import OllamaProvider
 from app.services.ai.openai_provider import OpenAIProvider
@@ -15,6 +16,8 @@ def get_provider(name: str | None = None) -> AIProvider:
             return OpenAIProvider()
         if provider in ("claude", "anthropic"):
             return AnthropicProvider()
+        if provider == "gemini":
+            return GeminiProvider()
     except Exception:  # noqa: BLE001
         # Si el proveedor falla al inicializar, se degrada a heuristico.
         return HeuristicProvider()
@@ -27,3 +30,7 @@ def openai_configured() -> bool:
 
 def anthropic_configured() -> bool:
     return bool(settings.ANTHROPIC_API_KEY)
+
+
+def gemini_configured() -> bool:
+    return bool(settings.GEMINI_API_KEY)

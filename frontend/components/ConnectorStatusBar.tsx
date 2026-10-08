@@ -58,12 +58,17 @@ export default function ConnectorStatusBar({
         ) : null}
 
         {state === "error" ? (
-          <span
-            className="max-w-[560px] truncate text-gob-error"
-            title={run?.error || ""}
-          >
-            · {run?.error || "revisa la configuración"}
-          </span>
+          <>
+            <span
+              className="max-w-[520px] truncate text-gob-error"
+              title={run?.error || ""}
+            >
+              · {run?.error || "revisa la configuración"}
+            </span>
+            <span className="shrink-0 text-content-muted">
+              · {formatRelative(run?.finished_at || run?.started_at)}
+            </span>
+          </>
         ) : null}
 
         {state === "off" ? (

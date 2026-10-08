@@ -99,6 +99,42 @@ def _call_with_timeout(func, *args, timeout: int):
             raise TimeoutError("Tiempo de espera de IA excedido") from exc
 
 
+def _run_diagnose(context: dict, provider_name: str | None) -> tuple:
+    """Ejecuta el diagnostico con cadena de respaldo: elegido -> Ollama -> heuristico."""
+    provider = get_provider(provider_name)
+    try:
+        analysis = _call_with_timeout(
+            provider.diagnose, context, timeout=settings.AI_TIMEOUT_SECONDS
+        )
+        return provider, analysis
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("fallo proveedor IA (%s): %s", provider.name, exc)
+
+    if (provider_name or settings.AI_PROVIDER or "").lower() != "ollama":
+        try:
+            from app.services.ai.ollama import OllamaProvider
+
+            local = OllamaProvider()
+            analysis = _call_with_timeout(
+                local.diagnose, context, timeout=settings.AI_TIMEOUT_SECONDS
+            )
+            analysis["advertencia"] = (
+                f"El proveedor '{provider.name}' no respondio; se uso Ollama local."
+            )
+            return local, analysis
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("fallback Ollama fallo: %s", exc)
+
+    from app.services.ai.heuristic import HeuristicProvider
+
+    heur = HeuristicProvider()
+    analysis = heur.diagnose(context)
+    analysis["advertencia"] = (
+        "El proveedor de IA no respondio; se muestra el diagnostico heuristico."
+    )
+    return heur, analysis
+
+
 def build_context(db: Session, fingerprint_id: int) -> dict | None:
     fp = db.get(ErrorFingerprint, fingerprint_id)
     if fp is None:
@@ -171,8 +207,11 @@ def _validate_citations(analysis: dict, context: dict) -> tuple[dict, list[int]]
     return analysis, inventados
 
 
-def _nagios_context() -> dict | None:
-    """Estado actual de Nagios (hosts + servicios con problemas) para el analisis cruzado."""
+def _nagios_context(
+    machines: list[str] | None = None,
+    mapping: dict[str, str] | None = None,
+) -> dict | None:
+    """Estado actual de Nagios + cruce por maquina via el mapeo Graylog<->Nagios."""
     try:
         from app.connectors.nagios import NagiosClient
 
@@ -185,6 +224,27 @@ def _nagios_context() -> dict | None:
         logger.warning("no se pudo obtener contexto de Nagios: %s", exc)
         return None
 
+    mapping = mapping or {}
+    por_host = {h["host"]: h for h in hosts}
+
+    por_maquina = []
+    for machine in machines or []:
+        nagios = mapping.get(machine) or None
+        info = por_host.get(nagios) if nagios else None
+        svc = [
+            {"servicio": s["servicio"], "estado": s["estado"]}
+            for s in services
+            if nagios and s["host"] == nagios and s["estado"] != "OK"
+        ]
+        por_maquina.append(
+            {
+                "graylog_host": machine,
+                "nagios_host": nagios,
+                "estado": info["estado"] if info else None,
+                "servicios_con_problema": svc,
+            }
+        )
+
     problemas = [
         {"host": s["host"], "servicio": s["servicio"], "estado": s["estado"]}
         for s in services
@@ -193,6 +253,7 @@ def _nagios_context() -> dict | None:
     return {
         "hosts": [{"host": h["host"], "estado": h["estado"]} for h in hosts],
         "servicios_con_problema": problemas,
+        "por_maquina": por_maquina,
         "conteo": {
             "hosts": len(hosts),
             "servicios": len(services),
@@ -210,23 +271,14 @@ def diagnose(db: Session, fingerprint_id: int, provider_name: str | None = None)
     if not context.get("related_tickets"):
         context["related_tickets"] = _suggest_tickets(db, fingerprint_id)
 
-    # Analisis cruzado: estado actual de Nagios.
-    context["nagios"] = _nagios_context()
+    # Analisis cruzado: estado actual de Nagios (con mapeo de hosts).
+    from app.services.host_mapping import get_mapping
 
-    provider = get_provider(provider_name)
-    try:
-        analysis = _call_with_timeout(
-            provider.diagnose, context, timeout=settings.AI_TIMEOUT_SECONDS
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("fallo proveedor IA (%s), se usa heuristico: %s", provider.name, exc)
-        from app.services.ai.heuristic import HeuristicProvider
+    context["nagios"] = _nagios_context(
+        context.get("machines") or [], get_mapping(db)
+    )
 
-        provider = HeuristicProvider()
-        analysis = provider.diagnose(context)
-        analysis["advertencia"] = (
-            "La IA no respondio a tiempo; se muestra el diagnostico heuristico."
-        )
+    provider, analysis = _run_diagnose(context, provider_name)
 
     analysis, inventados = _validate_citations(analysis, context)
     if inventados:
@@ -306,20 +358,7 @@ def diagnose_ticket(
         "related_tickets": [],
     }
 
-    provider = get_provider(provider_name)
-    try:
-        analysis = _call_with_timeout(
-            provider.diagnose, context, timeout=settings.AI_TIMEOUT_SECONDS
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("fallo proveedor IA (%s) en ticket: %s", provider.name, exc)
-        from app.services.ai.heuristic import HeuristicProvider
-
-        provider = HeuristicProvider()
-        analysis = provider.diagnose(context)
-        analysis["advertencia"] = (
-            "La IA no respondio a tiempo; se muestra el diagnostico heuristico."
-        )
+    provider, analysis = _run_diagnose(context, provider_name)
 
     correlations = list(
         db.execute(

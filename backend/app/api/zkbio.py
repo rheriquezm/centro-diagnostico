@@ -387,3 +387,104 @@ def usuario_historial(
             for r in items
         ],
     }
+
+
+def _direccion(reader: str | None) -> str | None:
+    txt = (reader or "").lower()
+    if "salida" in txt:
+        return "Salida"
+    if "entrada" in txt:
+        return "Entrada"
+    return None
+
+
+@router.get("/analisis")
+def analisis(
+    horas: int = Query(24, ge=1, le=8760),
+    dispositivo: str | None = None,
+    limit: int = Query(5000, ge=1, le=20000),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Analisis de accesos: movimientos de usuarios, falsos positivos
+    (accion registrada sin usuario en la BD) y desglose por dispositivo."""
+    since = _since(None, horas)
+    rows = list(
+        db.execute(
+            select(ZkAccessRecord)
+            .where(ZkAccessRecord.event_time >= since)
+            .order_by(desc(ZkAccessRecord.event_time))
+            .limit(limit)
+        ).scalars()
+    )
+
+    todos = [
+        d
+        for (d,) in db.execute(select(ZkAccessRecord.device_name).distinct()).all()
+        if d
+    ]
+    dispositivos: dict[str, dict] = {
+        d: {"nombre": d, "total": 0, "entradas": 0, "salidas": 0, "sin_registro": 0}
+        for d in todos
+    }
+    movimientos: list[dict] = []
+    falsos: list[dict] = []
+    por_evento: dict[str, int] = {}
+    total_mov = total_fals = 0
+
+    for r in rows:
+        dev = r.device_name or "—"
+        direccion = _direccion(r.reader_name)
+        has_user = bool((r.pin or "").strip() or (r.first_name or "").strip())
+        nombre_evento = (r.event_name or "").lower()
+        es_denegado = any(token in nombre_evento for token in EVENTOS_DENEGADO)
+
+        agg = dispositivos.setdefault(
+            dev,
+            {"nombre": dev, "total": 0, "entradas": 0, "salidas": 0, "sin_registro": 0},
+        )
+        agg["total"] += 1
+        if direccion == "Entrada":
+            agg["entradas"] += 1
+        elif direccion == "Salida":
+            agg["salidas"] += 1
+        if es_denegado:
+            agg["sin_registro"] += 1
+
+        if dispositivo and dev != dispositivo:
+            continue
+
+        por_evento[r.event_name or "—"] = por_evento.get(r.event_name or "—", 0) + 1
+
+        item = {
+            "fecha": r.event_time,
+            "usuario": _nombre(r),
+            "pin": r.pin,
+            "tarjeta": r.card_no,
+            "dispositivo": r.device_name,
+            "area": r.area_name,
+            "evento": r.event_name,
+            "modo": r.verify_mode,
+            "lector": r.reader_name,
+            "direccion": direccion,
+        }
+        if es_denegado:
+            total_fals += 1
+            falsos.append(item)
+        elif has_user:
+            total_mov += 1
+            movimientos.append(item)
+
+    return {
+        "horas": horas,
+        "dispositivo": dispositivo,
+        "total": len(rows),
+        "dispositivos": sorted(dispositivos.values(), key=lambda x: -x["total"]),
+        "movimientos": movimientos,
+        "falsos_positivos": falsos,
+        "por_evento": sorted(
+            ({"nombre": k, "total": v} for k, v in por_evento.items()),
+            key=lambda x: -x["total"],
+        ),
+        "total_movimientos": total_mov,
+        "total_falsos": total_fals,
+    }

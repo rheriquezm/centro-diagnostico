@@ -6,7 +6,11 @@ from app.core.config import settings
 from app.core.security import get_current_user
 from app.db.database import get_db
 from app.services import ai_service
-from app.services.ai.factory import anthropic_configured, openai_configured
+from app.services.ai.factory import (
+    anthropic_configured,
+    gemini_configured,
+    openai_configured,
+)
 
 router = APIRouter(tags=["ai"], dependencies=[Depends(get_current_user)])
 
@@ -33,10 +37,10 @@ def providers() -> dict:
         "default": (settings.AI_PROVIDER or "none").lower(),
         "providers": [
             {
-                "id": "ollama",
-                "label": "Local (Ollama)",
-                "model": settings.AI_MODEL or "llama3.2:1b",
-                "available": True,
+                "id": "gemini",
+                "label": "Gemini (Google)",
+                "model": settings.GEMINI_MODEL or "gemini-3.5-flash",
+                "available": gemini_configured(),
             },
             {
                 "id": "openai",
@@ -49,6 +53,12 @@ def providers() -> dict:
                 "label": "Claude (Anthropic)",
                 "model": settings.ANTHROPIC_MODEL or "claude-3-5-sonnet-latest",
                 "available": anthropic_configured(),
+            },
+            {
+                "id": "ollama",
+                "label": "Local (Ollama)",
+                "model": settings.AI_MODEL or "llama3.2:1b",
+                "available": True,
             },
         ],
     }

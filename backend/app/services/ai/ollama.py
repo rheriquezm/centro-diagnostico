@@ -5,6 +5,7 @@ import requests
 
 from app.core.config import settings
 from app.services.ai.base import AIProvider
+from app.services.ai.json_utils import parse_json_object
 
 logger = logging.getLogger("centro.ai.ollama")
 
@@ -54,10 +55,7 @@ class OllamaProvider(AIProvider):
         )
         response.raise_for_status()
         content = response.json().get("message", {}).get("content", "{}")
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError:
-            return {"summary": content}
+        return parse_json_object(content)
 
     def diagnose(self, context: dict) -> dict:
         return self._chat(

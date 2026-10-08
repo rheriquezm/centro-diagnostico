@@ -66,30 +66,32 @@ def sync_zkbio(days: int | None = None) -> dict:
         client = ZkbioClient()
         rows = client.transactions(inicio, fin)
 
-        # El grid repite registros: deduplicar por log_id.
-        records: dict[int, ZkAccessRecord] = {}
+        # El grid repite registros y el log_id se reutiliza entre dispositivos:
+        # la clave unica es (log_id, device_name, event_time).
+        records: dict[tuple, ZkAccessRecord] = {}
         for row in rows:
             record = _to_record(row)
             if record is not None:
-                records.setdefault(record.log_id, record)
+                records.setdefault(
+                    (record.log_id, record.device_name, record.event_time), record
+                )
 
-        existentes: set[int] = set()
-        ids = list(records.keys())
+        existentes: set[tuple] = set()
+        ids = list({k[0] for k in records})
         for i in range(0, len(ids), 2000):
             chunk = ids[i : i + 2000]
-            existentes.update(
-                db.execute(
-                    select(ZkAccessRecord.log_id).where(
-                        ZkAccessRecord.log_id.in_(chunk)
-                    )
-                )
-                .scalars()
-                .all()
-            )
+            for lid, dname, etime in db.execute(
+                select(
+                    ZkAccessRecord.log_id,
+                    ZkAccessRecord.device_name,
+                    ZkAccessRecord.event_time,
+                ).where(ZkAccessRecord.log_id.in_(chunk))
+            ).all():
+                existentes.add((lid, dname, etime))
 
         nuevos = 0
-        for log_id, record in records.items():
-            if log_id in existentes:
+        for key, record in records.items():
+            if key in existentes:
                 continue
             db.add(record)
             nuevos += 1

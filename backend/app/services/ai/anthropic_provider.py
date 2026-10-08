@@ -1,11 +1,11 @@
 import json
 import logging
-import re
 
 import requests
 
 from app.core.config import settings
 from app.services.ai.base import AIProvider
+from app.services.ai.json_utils import parse_json_object
 
 logger = logging.getLogger("centro.ai.claude")
 
@@ -23,22 +23,6 @@ SYSTEM_ANSWER = (
     "contexto entregado, en un parrafo breve. No inventes datos. Responde solo con JSON "
     "con las claves: answer (texto) y references (lista vacia o de {tipo, valor})."
 )
-
-_JSON_RE = re.compile(r"\{.*\}", re.S)
-
-
-def _parse_json(text: str) -> dict:
-    text = (text or "").strip()
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        match = _JSON_RE.search(text)
-        if match:
-            try:
-                return json.loads(match.group(0))
-            except json.JSONDecodeError:
-                pass
-    return {"summary": text}
 
 
 class AnthropicProvider(AIProvider):
@@ -77,7 +61,7 @@ class AnthropicProvider(AIProvider):
             for block in data.get("content", [])
             if block.get("type") == "text"
         )
-        return _parse_json(content)
+        return parse_json_object(content)
 
     def diagnose(self, context: dict) -> dict:
         return self._chat(

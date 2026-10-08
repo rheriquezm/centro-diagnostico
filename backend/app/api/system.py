@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.security import get_current_user
 from app.db.database import get_db
-from app.db.models import SyncRun
+from app.db.models import ErrorBucket, SyncRun
+from app.services.host_mapping import get_mapping, save_mapping
 from app.services.scheduler import get_state
 
 router = APIRouter(
@@ -129,3 +131,44 @@ def status(db: Session = Depends(get_db)) -> dict:
             "configured": settings.AI_PROVIDER != "none",
         },
     }
+
+
+class HostMappingIn(BaseModel):
+    mapping: dict[str, str]
+
+
+@router.get("/host-mapping")
+def get_host_mapping(db: Session = Depends(get_db)) -> dict:
+    """Equivalencias de host Graylog <-> Nagios (para el analisis cruzado)."""
+    try:
+        graylog_hosts = [
+            host
+            for (host,) in db.execute(select(ErrorBucket.host).distinct()).all()
+            if host
+        ]
+    except Exception:  # noqa: BLE001
+        graylog_hosts = []
+
+    nagios_hosts: list[str] = []
+    try:
+        from app.connectors.nagios import NagiosClient
+
+        client = NagiosClient()
+        if client.is_configured():
+            nagios_hosts = [h["host"] for h in client.hosts()]
+    except Exception:  # noqa: BLE001
+        nagios_hosts = []
+
+    mapping = get_mapping(db)
+    for host in graylog_hosts:
+        mapping.setdefault(host, mapping.get(host, ""))
+    return {
+        "graylog_hosts": sorted(graylog_hosts),
+        "nagios_hosts": sorted(nagios_hosts),
+        "mapping": mapping,
+    }
+
+
+@router.put("/host-mapping")
+def set_host_mapping(payload: HostMappingIn, db: Session = Depends(get_db)) -> dict:
+    return {"mapping": save_mapping(db, payload.mapping)}

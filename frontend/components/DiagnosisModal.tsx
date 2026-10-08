@@ -38,11 +38,35 @@ type Analysis = {
   confidence?: number | null;
 };
 
+type NagiosMaquina = {
+  graylog_host: string;
+  nagios_host: string | null;
+  estado: string | null;
+  servicios_con_problema: { servicio: string; estado: string }[];
+};
+
 type NagiosCtx = {
   hosts: { host: string; estado: string }[];
   servicios_con_problema: { host: string; servicio: string; estado: string }[];
+  por_maquina?: NagiosMaquina[];
   conteo: { hosts: number; servicios: number; problemas: number };
 };
+
+function tonoNagios(estado: string | null): string {
+  switch (estado) {
+    case "OK":
+    case "UP":
+      return "success";
+    case "WARNING":
+      return "warning";
+    case "CRITICAL":
+    case "DOWN":
+    case "UNREACHABLE":
+      return "error";
+    default:
+      return "neutral";
+  }
+}
 
 type FingerprintResult = {
   fingerprint_id: number;
@@ -171,7 +195,11 @@ export default function DiagnosisModal({
                 type="button"
                 disabled={!p.available}
                 onClick={() => setProvider(p.id)}
-                title={p.available ? `Modelo: ${p.model}` : "No configurado"}
+                title={
+                  p.available
+                    ? `Modelo: ${p.model}`
+                    : "No configurado: falta la API key en el servidor (.env)"
+                }
                 className={`rounded-md px-3 py-1 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
                   provider === p.id
                     ? "bg-gob-blue text-white"
@@ -179,10 +207,22 @@ export default function DiagnosisModal({
                 }`}
               >
                 {p.label}
+                {!p.available ? " (sin key)" : ""}
               </button>
             ))}
           </div>
         </div>
+
+        {providers.some((p) => !p.available) ? (
+          <p className="mb-4 text-xs text-content-muted">
+            No disponible(s):{" "}
+            {providers
+              .filter((p) => !p.available)
+              .map((p) => p.label)
+              .join(", ")}
+            . Configura la API key en el servidor (<code>.env</code>) para activarlo(s).
+          </p>
+        ) : null}
 
         {error ? (
           <div className="card text-gob-error">{error}</div>
@@ -301,23 +341,44 @@ export default function DiagnosisModal({
                 <p className="mb-2 text-sm font-semibold text-content">
                   Estado en Nagios (análisis cruzado)
                 </p>
+
+                {(data.context.nagios.por_maquina || []).length > 0 ? (
+                  <ul className="mb-3 space-y-1.5 text-sm">
+                    {(data.context.nagios.por_maquina || []).map((pm, i) => (
+                      <li key={i} className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-xs text-content">
+                          {pm.graylog_host}
+                        </span>
+                        <span className="text-content-muted">→</span>
+                        {pm.nagios_host ? (
+                          <>
+                            <span className="font-mono text-xs text-content">
+                              {pm.nagios_host}
+                            </span>
+                            <Badge tone={tonoNagios(pm.estado)}>{pm.estado || "?"}</Badge>
+                            {pm.servicios_con_problema.length > 0 ? (
+                              <span className="text-xs text-gob-error">
+                                {pm.servicios_con_problema.length} servicios con problema
+                              </span>
+                            ) : null}
+                          </>
+                        ) : (
+                          <span className="text-xs text-content-muted">
+                            sin equivalencia
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+
                 {data.context.nagios.conteo.problemas > 0 ? (
                   <ul className="space-y-1.5 text-sm">
                     {data.context.nagios.servicios_con_problema
                       .slice(0, 12)
                       .map((s, i) => (
                         <li key={i} className="flex items-center gap-2">
-                          <Badge
-                            tone={
-                              s.estado === "CRITICAL"
-                                ? "error"
-                                : s.estado === "WARNING"
-                                ? "warning"
-                                : "info"
-                            }
-                          >
-                            {s.estado}
-                          </Badge>
+                          <Badge tone={tonoNagios(s.estado)}>{s.estado}</Badge>
                           <span className="truncate">
                             {s.host} / {s.servicio}
                           </span>

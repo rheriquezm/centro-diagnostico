@@ -260,12 +260,20 @@ class ZkAccessRecord(Base):
 
     La hora se guarda como fecha/hora local del controlador (naive) para que el
     navegador la muestre tal cual la reporta el equipo.
+
+    Nota: el ``log_id`` NO es unico global (se repite entre dispositivos), por eso
+    la unicidad es compuesta por (log_id, device_name, event_time).
     """
 
     __tablename__ = "zk_access_records"
+    __table_args__ = (
+        UniqueConstraint(
+            "log_id", "device_name", "event_time", name="uq_zk_record"
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    log_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
+    log_id: Mapped[int] = mapped_column(BigInteger, index=True)
     event_time: Mapped[datetime | None] = mapped_column(DateTime, index=True)
     area_name: Mapped[str | None] = mapped_column(String(120), index=True)
     device_name: Mapped[str | None] = mapped_column(String(160), index=True)
@@ -280,4 +288,17 @@ class ZkAccessRecord(Base):
     verify_mode: Mapped[str | None] = mapped_column(String(60))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class HostMapping(Base):
+    """Equivalencia de nombre de host Graylog <-> Nagios (analisis cruzado)."""
+
+    __tablename__ = "host_mappings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    graylog_host: Mapped[str] = mapped_column(String(200), unique=True, index=True)
+    nagios_host: Mapped[str | None] = mapped_column(String(200))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
