@@ -398,6 +398,34 @@ def _direccion(reader: str | None) -> str | None:
     return None
 
 
+@router.get("/heatmap")
+def heatmap(
+    dias: int = Query(7, ge=1, le=90),
+    dispositivo: str | None = None,
+    db: Session = Depends(get_db),
+) -> dict:
+    """Mapa de calor de accesos: matriz [dia_semana][hora] (dia 0 = lunes)."""
+    since = datetime.now() - timedelta(days=dias)
+    stmt = select(ZkAccessRecord.event_time).where(
+        ZkAccessRecord.event_time >= since
+    )
+    if dispositivo:
+        stmt = stmt.where(ZkAccessRecord.device_name == dispositivo)
+    eventos = db.execute(stmt).scalars().all()
+
+    grid = [[0] * 24 for _ in range(7)]
+    maxv = 0
+    for et in eventos:
+        if et is None:
+            continue
+        fila = et.weekday()  # 0 = lunes
+        hora = et.hour
+        grid[fila][hora] += 1
+        if grid[fila][hora] > maxv:
+            maxv = grid[fila][hora]
+    return {"dias": dias, "max": maxv, "total": len(eventos), "grid": grid}
+
+
 @router.get("/analisis")
 def analisis(
     horas: int = Query(24, ge=1, le=8760),

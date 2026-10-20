@@ -33,7 +33,7 @@ body {
 
 @layer components {
   .card {
-    @apply rounded-xl border border-surface-border bg-surface-card p-5;
+    @apply rounded-2xl border border-surface-border bg-surface-card p-5 shadow-sm;
   }
   .card-title {
     @apply text-sm font-medium text-content-muted;
@@ -61,5 +61,15 @@ body {
   }
   .table td {
     @apply border-b border-surface-border px-3 py-2;
+  }
+  .section-title {
+    @apply mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-content-muted;
+  }
+  .section-title::before {
+    content: "";
+    @apply inline-block h-3.5 w-1 rounded-full bg-gob-blue;
+  }
+  .pill {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-surface-border px-3 py-1 text-xs text-content-muted;
   }
 }

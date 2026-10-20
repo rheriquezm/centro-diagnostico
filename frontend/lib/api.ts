@@ -64,4 +64,37 @@ export const api = {
     request<T>(path, { method: "POST", body: JSON.stringify(body) }),
   put: <T = unknown>(path: string, body: unknown) =>
     request<T>(path, { method: "PUT", body: JSON.stringify(body) }),
+  del: <T = unknown>(path: string) => request<T>(path, { method: "DELETE" }),
 };
+
+export async function upload<T = unknown>(
+  path: string,
+  formData: FormData
+): Promise<T> {
+  const token = getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const response = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers,
+    body: formData,
+  });
+
+  if (response.status === 401) {
+    clearSession();
+    if (typeof window !== "undefined") window.location.href = "/login";
+    throw new Error("No autorizado");
+  }
+
+  const data =
+    response.status === 204 ? null : await response.json().catch(() => null);
+  if (!response.ok) {
+    const detail =
+      data && typeof data === "object" && "detail" in data
+        ? (data as { detail: string }).detail
+        : "Error en la solicitud";
+    throw new Error(detail);
+  }
+  return data as T;
+}

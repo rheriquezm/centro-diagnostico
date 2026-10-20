@@ -57,7 +57,9 @@ class GeminiProvider(AIProvider):
                         "contents": [{"role": "user", "parts": [{"text": user}]}],
                         "generationConfig": {
                             "responseMimeType": "application/json",
-                            "maxOutputTokens": settings.AI_MAX_OUTPUT_TOKENS,
+                            "maxOutputTokens": max(
+                                settings.AI_MAX_OUTPUT_TOKENS, 1500
+                            ),
                             "temperature": 0.2,
                         },
                     },
@@ -73,11 +75,13 @@ class GeminiProvider(AIProvider):
                     continue
                 response.raise_for_status()
                 data = response.json()
+                candidatos = data.get("candidates") or []
                 content = ""
-                try:
-                    content = data["candidates"][0]["content"]["parts"][0]["text"]
-                except (KeyError, IndexError, TypeError):
-                    content = ""
+                if candidatos:
+                    parts = (candidatos[0].get("content") or {}).get("parts") or []
+                    content = "".join(
+                        p.get("text", "") for p in parts if isinstance(p, dict)
+                    )
                 return parse_json_object(content)
             time.sleep(1.5)
         if last_error:

@@ -5,9 +5,13 @@ import { useCallback, useEffect, useState } from "react";
 import Badge from "@/components/Badge";
 import BarList from "@/components/BarList";
 import ConnectorStatusBar from "@/components/ConnectorStatusBar";
+import ContractPanel from "@/components/ContractPanel";
 import DiagnosisModal from "@/components/DiagnosisModal";
 import Donut from "@/components/Donut";
 import KpiCard from "@/components/KpiCard";
+import SlaCompliance from "@/components/SlaCompliance";
+import SlaPanel from "@/components/SlaPanel";
+import WarrantyModal from "@/components/WarrantyModal";
 import { api } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import { useConnections } from "@/lib/useConnections";
@@ -51,6 +55,7 @@ export default function RedminePage() {
   const [syncing, setSyncing] = useState(false);
   const [testing, setTesting] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<number | null>(null);
+  const [warrantyTicket, setWarrantyTicket] = useState<number | null>(null);
   const { data: conn, refresh: refreshConn, runSync } = useConnections();
 
   const load = useCallback(async () => {
@@ -148,6 +153,12 @@ export default function RedminePage() {
         <KpiCard label="Cerrados" value={resumen?.cerrados ?? "—"} />
       </div>
 
+      <SlaPanel />
+
+      <SlaCompliance />
+
+      <ContractPanel />
+
       <div className="grid gap-4 md:grid-cols-2">
         <div className="card">
           <p className="mb-4 font-medium text-content">Distribución por estado</p>
@@ -226,12 +237,21 @@ export default function RedminePage() {
                 <td>{t.assigned_to || "—"}</td>
                 <td>{formatDateTime(t.updated_on)}</td>
                 <td>
-                  <button
-                    className="btn-ghost px-2 py-1 text-xs"
-                    onClick={() => setSelectedTicket(t.id)}
-                  >
-                    IA
-                  </button>
+                  <div className="flex gap-1">
+                    <button
+                      className="btn-ghost px-2 py-1 text-xs"
+                      onClick={() => setSelectedTicket(t.id)}
+                    >
+                      IA
+                    </button>
+                    <button
+                      className="btn-ghost px-2 py-1 text-xs"
+                      onClick={() => setWarrantyTicket(t.id)}
+                      title="Analizar si el caso está cubierto por garantía"
+                    >
+                      Garantía
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -244,6 +264,10 @@ export default function RedminePage() {
 
       {selectedTicket !== null ? (
         <DiagnosisModal ticketId={selectedTicket} onClose={() => setSelectedTicket(null)} />
+      ) : null}
+
+      {warrantyTicket !== null ? (
+        <WarrantyModal ticketId={warrantyTicket} onClose={() => setWarrantyTicket(null)} />
       ) : null}
     </div>
   );

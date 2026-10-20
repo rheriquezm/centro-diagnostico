@@ -8,6 +8,7 @@ from app.api import (
     ai,
     auth,
     continuous,
+    contracts,
     dashboard,
     graylog,
     health,
@@ -89,3 +90,4 @@ app.include_router(search.router, prefix="/api")
 app.include_router(yale.router, prefix="/api")
 app.include_router(zkbio.router, prefix="/api")
 app.include_router(nagios.router, prefix="/api")
+app.include_router(contracts.router, prefix="/api")

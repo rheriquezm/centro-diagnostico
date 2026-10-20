@@ -302,3 +302,32 @@ class HostMapping(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class Contract(Base):
+    """Contrato/carpeta cargada para el analisis de garantias vs. nuevos desarrollos."""
+
+    __tablename__ = "contracts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255))
+    content: Mapped[str] = mapped_column(Text)
+    chars: Mapped[int] = mapped_column(Integer, default=0)
+    uploaded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class SlaEntry(Base):
+    """Acuerdo de Nivel de Servicio (SLA) del contrato."""
+
+    __tablename__ = "sla_entries"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    orden: Mapped[int] = mapped_column(Integer, default=0)
+    criticidad: Mapped[str | None] = mapped_column(String(120))
+    descripcion: Mapped[str | None] = mapped_column(Text)
+    tiempo_respuesta: Mapped[str | None] = mapped_column(String(160))
+    tiempo_resolucion: Mapped[str | None] = mapped_column(String(160))
+    penalidad: Mapped[str | None] = mapped_column(String(255))
+    nota: Mapped[str | None] = mapped_column(Text)
