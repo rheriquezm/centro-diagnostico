@@ -4,12 +4,12 @@
 
 :root {
   color-scheme: light;
-  --surface: #f8fafc;
-  --surface-soft: #f1f5f9;
+  --surface: #ffffff;
+  --surface-soft: #f8f9fa;
   --surface-card: #ffffff;
-  --surface-border: #e2e8f0;
-  --text: #0f172a;
-  --text-muted: #64748b;
+  --surface-border: #dee2e6;
+  --text: #373737;
+  --text-muted: #6c757d;
 }
 
 .dark {
@@ -29,6 +29,16 @@ body {
 
 body {
   @apply bg-surface text-content antialiased;
+  font-family: var(--font-body), "Roboto", system-ui, sans-serif;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-heading), "Roboto Slab", serif;
 }
 
 @layer components {

@@ -5,6 +5,10 @@ const config: Config = {
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["var(--font-body)", "Roboto", "system-ui", "sans-serif"],
+        heading: ["var(--font-heading)", "Roboto Slab", "serif"],
+      },
       colors: {
         gob: {
           blue: "#003390",
