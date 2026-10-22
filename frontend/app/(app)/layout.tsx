@@ -34,11 +34,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen">
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between border-b border-surface-border bg-surface-soft px-6 py-3">
-          <span className="text-sm text-content-muted">{email}</span>
+        <header className="flex items-center justify-between bg-gob-blue px-6 py-3 text-white">
+          <span className="text-sm text-white/90">{email}</span>
           <div className="flex items-center gap-3">
             <ThemeToggle />
-            <button type="button" className="btn-ghost" onClick={logout}>
+            <button type="button" className="btn-header" onClick={logout}>
               Cerrar sesión
             </button>
           </div>

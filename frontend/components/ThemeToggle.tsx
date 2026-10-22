@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react";
 
 export default function ThemeToggle() {
-  const [dark, setDark] = useState(true);
+  const [dark, setDark] = useState(false);
 
   useEffect(() => {
     const stored = window.localStorage.getItem("cd_theme");
-    const isDark = stored ? stored === "dark" : true;
+    const isDark = stored === "dark";
     setDark(isDark);
     document.documentElement.classList.toggle("dark", isDark);
   }, []);
@@ -23,7 +23,7 @@ export default function ThemeToggle() {
     <button
       type="button"
       onClick={toggle}
-      className="btn-ghost"
+      className="btn-header"
       aria-label="Cambiar tema"
     >
       {dark ? "Modo claro" : "Modo oscuro"}
