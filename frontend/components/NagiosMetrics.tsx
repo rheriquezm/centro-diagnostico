@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import Badge from "@/components/Badge";
 import Donut from "@/components/Donut";
+import NagiosServiceModal, { ServiceInfo } from "@/components/NagiosServiceModal";
 import { api } from "@/lib/api";
 
 type HostMetric = {
@@ -19,6 +20,7 @@ type Data = {
   host_counts: Record<string, number>;
   service_counts: Record<string, number>;
   treemap: Array<{ host: string; servicio: string; estado: string }>;
+  services: ServiceInfo[];
   host_metrics: HostMetric[];
 };
 
@@ -64,6 +66,7 @@ function Bar({
 export default function NagiosMetrics() {
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<ServiceInfo | null>(null);
 
   const load = useCallback(async (force = false) => {
     setError(null);
@@ -136,14 +139,28 @@ export default function NagiosMetrics() {
               </p>
               <div className="grid max-h-40 grid-cols-3 gap-1 overflow-auto sm:grid-cols-4">
                 {data.treemap.map((t, i) => (
-                  <div
+                  <button
                     key={i}
-                    className="flex min-h-[46px] flex-col justify-end rounded p-1.5 text-[9px] text-white"
+                    type="button"
+                    onClick={() => {
+                      const full = (data.services || []).find(
+                        (s) => s.host === t.host && s.servicio === t.servicio
+                      );
+                      setSelected(
+                        full || {
+                          host: t.host,
+                          servicio: t.servicio,
+                          estado: t.estado,
+                          salida: "",
+                        }
+                      );
+                    }}
+                    className="flex min-h-[46px] cursor-pointer flex-col justify-end rounded p-1.5 text-left text-[9px] text-white transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-white/70"
                     style={{ background: ESTADO_COLOR[t.estado] || "#64748b" }}
-                    title={`${t.host} · ${t.servicio} · ${t.estado}`}
+                    title={`${t.host} · ${t.servicio} · ${t.estado} — clic para ver más`}
                   >
                     <span className="line-clamp-2 leading-tight">{t.servicio}</span>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
@@ -194,6 +211,10 @@ export default function NagiosMetrics() {
           </div>
         </div>
       )}
+
+      {selected ? (
+        <NagiosServiceModal service={selected} onClose={() => setSelected(null)} />
+      ) : null}
     </section>
   );
 }
