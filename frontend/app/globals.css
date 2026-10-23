@@ -4,22 +4,24 @@
 
 :root {
   color-scheme: light;
-  --surface: #ffffff;
-  --surface-soft: #f8f9fa;
+  --surface: #f4f6fb;
+  --surface-soft: #eef2ff;
   --surface-card: #ffffff;
-  --surface-border: #dee2e6;
-  --text: #373737;
-  --text-muted: #6c757d;
+  --surface-border: #e2e6ee;
+  --text: #1a1a1a;
+  --text-muted: #5b6472;
+  --heading: #002366;
 }
 
 .dark {
   color-scheme: dark;
-  --surface: #0b1220;
-  --surface-soft: #111a2e;
-  --surface-card: #151f37;
-  --surface-border: #243049;
-  --text: #e2e8f0;
-  --text-muted: #94a3b8;
+  --surface: #0f1729;
+  --surface-soft: #16203a;
+  --surface-card: #16203a;
+  --surface-border: #2b3550;
+  --text: #e6e9f0;
+  --text-muted: #9aa4b8;
+  --heading: #9db4f0;
 }
 
 html,
@@ -29,7 +31,7 @@ body {
 
 body {
   @apply bg-surface text-content antialiased;
-  font-family: var(--font-body), "Roboto", system-ui, sans-serif;
+  font-family: "Segoe UI", var(--font-body), "Roboto", -apple-system, sans-serif;
 }
 
 h1,
@@ -39,11 +41,12 @@ h4,
 h5,
 h6 {
   font-family: var(--font-heading), "Roboto Slab", serif;
+  color: var(--heading);
 }
 
 @layer components {
   .card {
-    @apply rounded-2xl border border-surface-border bg-surface-card p-5 shadow-sm;
+    @apply rounded-[10px] border border-surface-border bg-surface-card p-5 shadow-sm;
   }
   .card-title {
     @apply text-sm font-medium text-content-muted;
@@ -59,6 +62,9 @@ h6 {
   }
   .btn-ghost {
     @apply btn border border-surface-border text-content hover:bg-surface-soft;
+  }
+  .btn-header {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-white/50 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10;
   }
   .input {
     @apply w-full rounded-lg border border-surface-border bg-surface-soft px-3 py-2 text-sm text-content outline-none focus:border-gob-info;

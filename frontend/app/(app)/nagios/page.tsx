@@ -5,6 +5,8 @@ import { useCallback, useEffect, useState } from "react";
 import Badge from "@/components/Badge";
 import Donut from "@/components/Donut";
 import KpiCard from "@/components/KpiCard";
+import NagiosMetrics from "@/components/NagiosMetrics";
+import NetworkMap from "@/components/NetworkMap";
 import { api } from "@/lib/api";
 
 type HostItem = { host: string; estado: string; salida: string };
@@ -135,6 +137,10 @@ export default function NagiosPage() {
           hint={`OK: ${sc.OK || 0} · Unknown: ${sc.UNKNOWN || 0}`}
         />
       </div>
+
+      <NetworkMap />
+
+      <NagiosMetrics />
 
       {/* Cuadro de alertas */}
       <section
