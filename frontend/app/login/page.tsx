@@ -142,15 +142,14 @@ export default function LoginPage() {
     >
       <div className="w-full max-w-md rounded-xl bg-white p-8 shadow-2xl">
         <h1 className="text-2xl font-bold" style={{ color: "#002366" }}>
-          lab.serviciocivil.cl
+          Centro de Diagnóstico - Servicio Civil
         </h1>
         <p className="mt-3 text-sm leading-relaxed" style={{ color: "#5b6472" }}>
-          Ingresa con tu cuenta institucional para acceder a los módulos
-          disponibles.
+          Ingresa con tu cuenta institucional para acceder al Centro de
+          Diagnóstico del Servicio Civil
         </p>
         <p className="mt-3 text-sm leading-relaxed" style={{ color: "#5b6472" }}>
-          Solo se aceptan cuentas institucionales de Google del dominio
-          autorizado.
+          Solo se aceptan cuentas institucionales del servicio.
         </p>
 
         <button
