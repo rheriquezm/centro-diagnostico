@@ -1,0 +1,14 @@
+{
+  "name": "centinela",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Monitor local de actualizaciones y alertas de seguridad (CVE).",
+  "scripts": {
+    "start": "node src/server.js",
+    "sync": "node src/cli-sync.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -97,6 +97,14 @@ class Settings(BaseSettings):
     NAGIOS_VERIFY_SSL: bool = False
     NAGIOS_TIMEOUT: int = 40
 
+    # Centinela: monitor local de actualizaciones y CVEs (Node en 127.0.0.1:4310)
+    CENTINELA_URL: str = "http://host.docker.internal:4310"
+    CENTINELA_PUBLIC_URL: str = "http://localhost:4310"
+    CENTINELA_USER: str = ""
+    CENTINELA_PASSWORD: str = ""
+    CENTINELA_VERIFY_SSL: bool = True
+    CENTINELA_TIMEOUT: int = 20
+
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]

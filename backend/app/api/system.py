@@ -90,6 +90,12 @@ def connections(db: Session = Depends(get_db)) -> dict:
                 "detail": settings.NAGIOS_URL,
                 "last_run": last.get("nagios"),
             },
+            "centinela": {
+                "label": "Actualizaciones (Centinela)",
+                "configured": bool(settings.CENTINELA_URL),
+                "detail": settings.CENTINELA_URL,
+                "last_run": last.get("centinela"),
+            },
         },
         "ai": {
             "provider": settings.AI_PROVIDER,
@@ -124,6 +130,11 @@ def status(db: Session = Depends(get_db)) -> dict:
                 "url": settings.GRAYLOG_URL,
                 "streams": settings.graylog_streams,
                 "last_sync": last_sync.get("graylog"),
+            },
+            "centinela": {
+                "configured": bool(settings.CENTINELA_URL),
+                "url": settings.CENTINELA_URL,
+                "last_sync": last_sync.get("centinela"),
             },
         },
         "ai": {

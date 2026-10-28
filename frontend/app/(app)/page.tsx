@@ -74,6 +74,17 @@ type NagiosRes = {
   host_counts: Record<string, number>;
   service_counts: Record<string, number>;
 };
+type CentinelaRes = {
+  stats: {
+    total: number;
+    afectan: number;
+    urgentes: number;
+    kev: number;
+    actualizaciones: number;
+    inventario: number;
+  };
+  last_sync?: string | null;
+};
 
 type HeatmapRes = { dias: number; max: number; total: number; grid: number[][] };
 
@@ -83,6 +94,7 @@ type Fuentes = {
   yale?: YaleRes;
   zk?: ZkRes;
   nagios?: NagiosRes;
+  centinela?: CentinelaRes;
 };
 
 function serieHorasZk(items: Array<{ hora: number; total: number }>) {
@@ -130,13 +142,14 @@ export default function DashboardPage() {
   }, [load]);
 
   const loadFuentes = useCallback(async () => {
-    const [g, r, y, z, n, h] = await Promise.allSettled([
+    const [g, r, y, z, n, h, c] = await Promise.allSettled([
       api.get<GraylogRes>("/api/graylog/resumen"),
       api.get<RedmineRes>("/api/redmine/resumen"),
       api.get<YaleRes>("/api/yale/resumen?dias=7"),
       api.get<ZkRes>("/api/zkbio/resumen?horas=24"),
       api.get<NagiosRes>("/api/nagios/summary"),
       api.get<HeatmapRes>("/api/zkbio/heatmap?dias=7"),
+      api.get<CentinelaRes>("/api/centinela/summary"),
     ]);
     setFuentes({
       graylog: g.status === "fulfilled" ? g.value : undefined,
@@ -144,6 +157,7 @@ export default function DashboardPage() {
       yale: y.status === "fulfilled" ? y.value : undefined,
       zk: z.status === "fulfilled" ? z.value : undefined,
       nagios: n.status === "fulfilled" ? n.value : undefined,
+      centinela: c.status === "fulfilled" ? c.value : undefined,
     });
     setHeatmap(h.status === "fulfilled" ? h.value : null);
   }, []);
@@ -234,7 +248,7 @@ export default function DashboardPage() {
             </h2>
             <p className="text-sm text-content-muted">
               Monitoreo, correlación y análisis con IA · Graylog · Redmine ·
-              Cerradura Yale · Control de Acceso · Nagios
+              Cerradura Yale · Control de Acceso · Nagios · Actualizaciones
             </p>
           </div>
           <button className="btn-primary" onClick={syncNow}>
@@ -270,7 +284,7 @@ export default function DashboardPage() {
         <h3 className="section-title">
           Fuentes de análisis
         </h3>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <SourceCard
             href="/graylog"
             title="Graylog"
@@ -332,6 +346,26 @@ export default function DashboardPage() {
             }
             tone={(fuentes.nagios?.problemas ?? 0) > 0 ? "error" : "ok"}
             toneText="Hosts/servicios con problemas"
+          />
+          <SourceCard
+            href="/actualizaciones"
+            title="Actualizaciones"
+            color="#0891b2"
+            value={fuentes.centinela?.stats.urgentes ?? "—"}
+            label="Urgentes (CVE)"
+            secondary={
+              fuentes.centinela
+                ? `${fuentes.centinela.stats.total} hallazgos · ${fuentes.centinela.stats.afectan} te afectan`
+                : "Sin datos"
+            }
+            tone={
+              !fuentes.centinela
+                ? "neutral"
+                : (fuentes.centinela.stats.urgentes ?? 0) > 0
+                ? "error"
+                : "ok"
+            }
+            toneText="Actualizaciones urgentes y CVEs"
           />
         </div>
       </section>

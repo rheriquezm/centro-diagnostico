@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Centinela · Actualizaciones y CVE</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div>
+        <p class="eyebrow">Servicio Civil</p>
+        <h1>Centinela</h1>
+        <p class="sub">Actualizaciones de software y alertas de seguridad (CVE)</p>
+      </div>
+      <div class="top-actions">
+        <span id="status" class="pill">Cargando…</span>
+        <button id="sync" class="btn">Sincronizar</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="kpis" id="kpis"></section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>Prioridad de hoy</h2>
+          <span class="muted" id="prioridad-nota"></span>
+        </div>
+        <div id="prioridad" class="list"></div>
+      </section>
+
+      <section class="card">
+        <h2>Actualizaciones disponibles</h2>
+        <div id="updates"></div>
+      </section>
+
+      <section class="grid2">
+        <div class="card">
+          <h2>Inventario vigilado</h2>
+          <div id="inventario" class="inv"></div>
+        </div>
+        <div class="card">
+          <h2>Vigilancia adicional</h2>
+          <div id="watch" class="pills"></div>
+          <p class="muted small" id="fuentes"></p>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

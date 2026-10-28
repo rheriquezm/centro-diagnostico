@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import (
     ai,
     auth,
+    centinela,
     continuous,
     contracts,
     dashboard,
@@ -90,4 +91,5 @@ app.include_router(search.router, prefix="/api")
 app.include_router(yale.router, prefix="/api")
 app.include_router(zkbio.router, prefix="/api")
 app.include_router(nagios.router, prefix="/api")
+app.include_router(centinela.router, prefix="/api")
 app.include_router(contracts.router, prefix="/api")

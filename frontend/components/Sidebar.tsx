@@ -11,6 +11,7 @@ const ANALISIS: Item[] = [
   { href: "/cerradura", label: "Cerradura Yale", color: "#f6a500" },
   { href: "/accesos", label: "Control de Acceso", color: "#7c3aed" },
   { href: "/nagios", label: "Nagios", color: "#d93025" },
+  { href: "/actualizaciones", label: "Actualizaciones", color: "#0891b2" },
 ];
 
 export default function Sidebar() {
